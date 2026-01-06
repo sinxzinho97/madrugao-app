@@ -21,7 +21,6 @@ def get_connection():
         scopes=scopes
     )
     client = gspread.authorize(creds)
-    # ID DA PLANILHA
     return client.open_by_key("1OSxEwiE3voMOd-EI6CJ034torY-K7oFoz8EReyXkmPA")
 
 def load_data(sheet_name, expected_cols):
@@ -271,7 +270,7 @@ if is_admin:
                             st.warning(f"{s} removido!")
                             st.rerun()
 
-# === ABA 4: FINANCEIRO (COM DASHBOARD) ===
+# === ABA 4: FINANCEIRO (RESUMO SÓ PARA ADMIN) ===
 with tab4:
     st.header("💰 Financeiro")
     if not df_elenco.empty:
@@ -291,35 +290,30 @@ with tab4:
             df_fin = df_mens.copy()
             for c in cols[1:]: df_fin[c] = False
         
-        # --- DASHBOARD FINANCEIRO ---
-        hoje = datetime.today()
-        meses_map = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
-        mes_atual = meses_map[hoje.month]
-        dia_hoje = hoje.day
-
-        # Calcula quem já pagou (considera TRUE quem tem qualquer valor verdadeiro)
-        pagos = df_fin[df_fin[mes_atual].apply(lambda x: x == True or str(x).upper() == "TRUE")].shape[0]
-        total = df_fin.shape[0]
-        faltam = total - pagos
-        
-        # Regra de inadimplência: Só mostra se for dia > 20
-        inadimplentes = faltam if dia_hoje > 20 else 0
-
-        # Mostra os Cards
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Total Atletas", total)
-        k2.metric(f"Pagos ({mes_atual})", pagos)
-        k3.metric("Faltam Pagar", faltam)
-        
-        if inadimplentes > 0:
-            k4.metric("🚨 Inadimplentes", inadimplentes, delta="-Atrasados", delta_color="inverse")
-        else:
-            k4.metric("Inadimplentes", "0", delta="No prazo")
-
-        st.divider()
-
-        # Tabela
+        # SEPARAÇÃO DO QUE CADA UM VÊ
         if is_admin:
+            # --- DASHBOARD (EXCLUSIVO ADMIN) ---
+            hoje = datetime.today()
+            meses_map = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
+            mes_atual = meses_map[hoje.month]
+            dia_hoje = hoje.day
+
+            pagos = df_fin[df_fin[mes_atual].apply(lambda x: x == True or str(x).upper() == "TRUE")].shape[0]
+            total = df_fin.shape[0]
+            faltam = total - pagos
+            inadimplentes = faltam if dia_hoje > 20 else 0
+
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("Total Atletas", total)
+            k2.metric(f"Pagos ({mes_atual})", pagos)
+            k3.metric("Faltam Pagar", faltam)
+            
+            if inadimplentes > 0:
+                k4.metric("🚨 Inadimplentes", inadimplentes, delta="-Atrasados", delta_color="inverse")
+            else:
+                k4.metric("Inadimplentes", "0", delta="No prazo")
+
+            st.divider()
             st.info("Modo Admin: Edite e salve.")
             edited = st.data_editor(df_fin, use_container_width=True, hide_index=True)
             if st.button("SALVAR PAGAMENTOS"):
@@ -327,6 +321,8 @@ with tab4:
                     st.success("Financeiro Atualizado!")
                     st.rerun()
         else:
+            # --- VISITANTE (SÓ VÊ A TABELA, SEM DASHBOARD) ---
+            st.info("Transparência: Confira abaixo a lista de pagamentos.")
             st.dataframe(df_fin, use_container_width=True, hide_index=True)
     else:
         st.warning("Sem dados.")
