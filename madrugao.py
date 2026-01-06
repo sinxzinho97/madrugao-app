@@ -24,7 +24,6 @@ with st.sidebar:
 st.title("Pelada Madrugão 🦉 💚 🖤")
 
 # --- CONEXÃO INTELIGENTE (CACHE) ---
-# @st.cache_resource evita conectar no Google toda vez. Conecta uma vez e segura a conexão.
 @st.cache_resource
 def get_connection():
     scopes = [
@@ -36,12 +35,9 @@ def get_connection():
         scopes=scopes
     )
     client = gspread.authorize(creds)
-    # Abre a planilha uma vez e retorna o objeto Spreadsheet
     return client.open_by_key("1OSxEwiE3voMOd-EI6CJ034torY-K7oFoz8EReyXkmPA")
 
 # --- LEITURA DE DADOS (CACHE) ---
-# @st.cache_data(ttl=60) guarda os dados por 60 segundos.
-# Isso reduz drasticamente o consumo da cota do Google.
 @st.cache_data(ttl=60)
 def load_data(sheet_name, expected_cols):
     try:
@@ -59,7 +55,6 @@ def load_data(sheet_name, expected_cols):
                 df[col] = ""
         return df
     except Exception as e:
-        # Se der erro de cota, espera um pouco e tenta de novo (Backoff)
         if "429" in str(e):
             time.sleep(2)
             st.warning("Muitos acessos. Aguardando Google liberar...")
@@ -79,8 +74,6 @@ def save_data(df, sheet_name):
         worksheet.clear()
         dados = [df.columns.values.tolist()] + df.values.tolist()
         worksheet.update(range_name='A1', values=dados)
-        
-        # O PULO DO GATO: Limpa o cache para mostrar os dados novos imediatamente
         st.cache_data.clear()
         return True
     except Exception as e:
@@ -259,7 +252,8 @@ if user_role == "admin":
 if user_role == "admin":
     with tab2:
         st.header("Súmula")
-        dt = st.date_input("Data", datetime.today())
+        # ADICIONADO KEY PARA EVITAR DUPLICATE ID
+        dt = st.date_input("Data", datetime.today(), key="data_sumula")
         mens_list = sorted(df_elenco['nome'].astype(str).tolist()) if not df_elenco.empty else []
         def_m = [x for x in st.session_state.get('mem_m', []) if x in mens_list]
         def_d = st.session_state.get('mem_d', "")
@@ -305,8 +299,8 @@ if user_role == "admin":
 
         if gm:
             with c_print:
-                placar_v_man = st.number_input("Verde", value=score_verde, min_value=0)
-                placar_p_man = st.number_input("Preto", value=score_preto, min_value=0)
+                placar_v_man = st.number_input("Verde", value=score_verde, min_value=0, key="pv_man")
+                placar_p_man = st.number_input("Preto", value=score_preto, min_value=0, key="pp_man")
                 img_card = gerar_card_jogo(str(dt), placar_v_man, placar_p_man, gm, df_elenco)
                 st.download_button("📸 Card do Jogo", img_card, f"jogo_{dt}.png", "image/png")
 
@@ -421,12 +415,13 @@ with tab5:
         # Área de Adicionar (Rápida)
         with st.expander("➕ Adicionar Novo Lançamento", expanded=True):
             c_g1, c_g2, c_g3, c_g4 = st.columns([1, 2, 1, 1])
-            d_data = c_g1.date_input("Data", datetime.today())
-            d_desc = c_g2.text_input("Descrição (Ex: Mensalidades)")
-            d_valor = c_g3.number_input("Valor (R$)", min_value=0.0, step=10.0)
-            d_tipo = c_g4.radio("Tipo:", ["Entrada ( + )", "Saída ( - )"], horizontal=True)
+            # ADICIONADO KEYS PARA EVITAR CONFLITO COM A DATA DA SÚMULA
+            d_data = c_g1.date_input("Data", datetime.today(), key="cofre_data")
+            d_desc = c_g2.text_input("Descrição (Ex: Mensalidades)", key="cofre_desc")
+            d_valor = c_g3.number_input("Valor (R$)", min_value=0.0, step=10.0, key="cofre_valor")
+            d_tipo = c_g4.radio("Tipo:", ["Entrada ( + )", "Saída ( - )"], horizontal=True, key="cofre_tipo")
             
-            if st.button("💾 REGISTRAR MOVIMENTAÇÃO"):
+            if st.button("💾 REGISTRAR MOVIMENTAÇÃO", key="btn_cofre_add"):
                 if d_desc and d_valor > 0:
                     valor_final = d_valor if "Entrada" in d_tipo else -d_valor
                     nova_mov = pd.DataFrame([{"Data": str(d_data), "Descricao": d_desc, "Valor": valor_final}])
@@ -449,10 +444,11 @@ with tab5:
                 column_config={
                     "Valor": st.column_config.NumberColumn(format="R$ %.2f"),
                     "Data": st.column_config.DateColumn(format="DD/MM/YYYY")
-                }
+                },
+                key="editor_cofre" # KEY ÚNICA
             )
             
-            if st.button("💾 SALVAR ALTERAÇÕES (COFRE)"):
+            if st.button("💾 SALVAR ALTERAÇÕES (COFRE)", key="btn_cofre_save"):
                 # Converte de volta para string antes de salvar no Google Sheets
                 edited_df['Data'] = edited_df['Data'].astype(str)
                 save_data(edited_df, "saidas")
@@ -466,17 +462,16 @@ with tab5:
                 df_temp = df_mov.copy()
                 df_temp = df_temp.sort_values("Data", ascending=False)
                 
-                # Criamos opções com ID oculto no índice do dataframe original se possível, 
-                # mas aqui vamos usar uma string combinada.
-                # A melhor forma segura é usar o índice resetado e mapear.
+                # Criamos opções com ID oculto no índice do dataframe original
                 opcoes_exclusao = []
                 for idx, row in df_temp.iterrows():
-                    opcoes_exclusao.append(f"[{idx}] {row['Data'].strftime('%d/%m/%Y')} | {row['Descricao']} | R$ {row['Valor']:.2f}")
+                    dt_str = row['Data'].strftime('%d/%m/%Y') if pd.notnull(row['Data']) else "Data Inválida"
+                    opcoes_exclusao.append(f"[{idx}] {dt_str} | {row['Descricao']} | R$ {row['Valor']:.2f}")
                 
                 if opcoes_exclusao:
-                    selecionado = st.selectbox("Selecione o item para excluir:", options=opcoes_exclusao)
+                    selecionado = st.selectbox("Selecione o item para excluir:", options=opcoes_exclusao, key="sel_del_cofre")
                     
-                    if st.button("🗑️ EXCLUIR ITEM SELECIONADO"):
+                    if st.button("🗑️ EXCLUIR ITEM SELECIONADO", key="btn_del_cofre"):
                         # Extrai o índice original que está entre colchetes [123]
                         idx_to_drop = int(selecionado.split("]")[0].replace("[", ""))
                         
