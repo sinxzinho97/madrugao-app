@@ -11,7 +11,7 @@ import os
 # --- CONFIGURAÇÕES ---
 st.set_page_config(page_title="Pelada Madrugão", page_icon="🦉", layout="wide")
 
-# --- BARRA LATERAL COM LOGO ---
+# --- BARRA LATERAL ---
 with st.sidebar:
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
@@ -19,10 +19,10 @@ with st.sidebar:
         st.write("")
     st.title("🔒 Acesso")
 
-# --- TÍTULO PRINCIPAL ---
+# --- TÍTULO ---
 st.title("Pelada Madrugão 🦉 💚 🖤")
 
-# --- CONEXÃO COM GOOGLE SHEETS ---
+# --- CONEXÃO ---
 def get_connection():
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -70,7 +70,7 @@ def save_data(df, sheet_name):
         st.error(f"Erro ao salvar: {e}")
         return False
 
-# --- FUNÇÃO RELATÓRIOS ---
+# --- FUNÇÕES VISUAIS ---
 def gerar_imagem_bonita(df, titulo="Relatório"):
     cor_cabecalho = '#1b5e20' 
     cor_texto_cabecalho = 'white'
@@ -82,55 +82,35 @@ def gerar_imagem_bonita(df, titulo="Relatório"):
     ax.axis('off')
     
     plt.title(titulo.upper(), fontsize=20, weight='bold', color='#1b5e20', pad=25)
-    
     tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center')
-    
-    tabela.auto_set_font_size(False)
-    tabela.set_fontsize(14)
-    tabela.scale(1.2, 2.0)
+    tabela.auto_set_font_size(False); tabela.set_fontsize(14); tabela.scale(1.2, 2.0)
     
     for (row, col), cell in tabela.get_celld().items():
-        cell.set_edgecolor('#cfd8dc')
-        cell.set_linewidth(1)
+        cell.set_edgecolor('#cfd8dc'); cell.set_linewidth(1)
         if row == 0:
-            cell.set_facecolor(cor_cabecalho)
-            cell.set_text_props(color=cor_texto_cabecalho, weight='bold')
-            cell.set_height(0.12)
+            cell.set_facecolor(cor_cabecalho); cell.set_text_props(color=cor_texto_cabecalho, weight='bold'); cell.set_height(0.12)
         else:
             cell.set_height(0.1)
-            if row % 2 == 0:
-                cell.set_facecolor(cor_linha_par)
-            else:
-                cell.set_facecolor(cor_linha_impar)
+            if row % 2 == 0: cell.set_facecolor(cor_linha_par)
+            else: cell.set_facecolor(cor_linha_impar)
     
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', dpi=300, transparent=False)
-    buf.seek(0)
+    buf = io.BytesIO(); plt.savefig(buf, format='png', bbox_inches='tight', dpi=300, transparent=False); buf.seek(0)
     return buf
 
-# --- FUNÇÃO CARD DO JOGO ---
 def gerar_card_jogo(data_jogo, placar_verde, placar_preto, gols_map, df_elenco):
     art_verde = []
     art_preto = []
-    
     for jogador, gols in gols_map.items():
         if gols > 0:
             time_jogador = "Indefinido"
             if not df_elenco.empty:
                 row = df_elenco[df_elenco['nome'] == jogador]
-                if not row.empty:
-                    time_jogador = row.iloc[0]['time']
-            
+                if not row.empty: time_jogador = row.iloc[0]['time']
             txt = f"{jogador}" if gols == 1 else f"{jogador} ({gols})"
-            if time_jogador == 'Verde':
-                art_verde.append(txt)
-            else:
-                art_preto.append(txt)
+            if time_jogador == 'Verde': art_verde.append(txt)
+            else: art_preto.append(txt)
 
-    fig, ax = plt.subplots(figsize=(10, 8))
-    ax.axis('off')
-    fig.patch.set_facecolor('#f8f9fa')
-    
+    fig, ax = plt.subplots(figsize=(10, 8)); ax.axis('off'); fig.patch.set_facecolor('#f8f9fa')
     plt.text(0.5, 0.95, "RESULTADO FINAL", ha='center', va='center', fontsize=22, weight='bold', color='#333')
     plt.text(0.5, 0.88, f"{data_jogo}", ha='center', va='center', fontsize=12, color='#666')
     plt.text(0.25, 0.75, "VERDE", ha='center', fontsize=18, weight='bold', color='#2E7D32')
@@ -138,25 +118,15 @@ def gerar_card_jogo(data_jogo, placar_verde, placar_preto, gols_map, df_elenco):
     plt.text(0.5, 0.65, f"{placar_verde}  x  {placar_preto}", ha='center', va='center', fontsize=50, weight='bold')
     plt.plot([0.1, 0.9], [0.55, 0.55], color='#ddd', lw=2)
     plt.text(0.5, 0.50, "GOLS", ha='center', fontsize=14, color='#888')
-    
-    y_pos = 0.45
-    for art in art_verde:
-        plt.text(0.25, y_pos, art, ha='center', fontsize=12, color='#2E7D32')
-        y_pos -= 0.05
-        
-    y_pos = 0.45
-    for art in art_preto:
-        plt.text(0.75, y_pos, art, ha='center', fontsize=12, color='#212121')
-        y_pos -= 0.05
-        
+    y = 0.45
+    for a in art_verde: plt.text(0.25, y, a, ha='center', fontsize=12, color='#2E7D32'); y -= 0.05
+    y = 0.45
+    for a in art_preto: plt.text(0.75, y, a, ha='center', fontsize=12, color='#212121'); y -= 0.05
     plt.text(0.5, 0.05, "PELADA MADRUGAO", ha='center', fontsize=10, color='#aaa', style='italic')
-
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', dpi=150, facecolor='#f8f9fa')
-    buf.seek(0)
+    buf = io.BytesIO(); plt.savefig(buf, format='png', bbox_inches='tight', dpi=150, facecolor='#f8f9fa'); buf.seek(0)
     return buf
 
-# --- LISTA PADRÃO ---
+# --- DADOS PADRÃO ---
 LISTA_PADRAO = [
     {"nome": "Alex", "time": "Verde", "tipo": "Mensalista"},
     {"nome": "Anderson", "time": "Verde", "tipo": "Mensalista"},
@@ -200,40 +170,33 @@ def carregar_elenco():
         save_data(df, "elenco")
     return df
 
-# --- SISTEMA DE LOGIN (ADMIN vs TESOUREIRO vs VISITANTE) ---
+# --- LOGIN ---
 SENHA_ADMIN = st.secrets.get("admin_password", "1234")
 SENHA_FINANCEIRO = st.secrets.get("finance_password", "money")
-
 senha_digitada = st.sidebar.text_input("Senha", type="password")
 
-user_role = "visitor" # Padrão
+user_role = "visitor"
 if senha_digitada == SENHA_ADMIN:
     user_role = "admin"
-    st.sidebar.success("🔑 Modo: ADMIN")
+    st.sidebar.success("🔑 ADMIN")
 elif senha_digitada == SENHA_FINANCEIRO:
     user_role = "finance"
-    st.sidebar.warning("💰 Modo: TESOUREIRO")
+    st.sidebar.warning("💰 TESOUREIRO")
 else:
     user_role = "visitor"
-    st.sidebar.info("👀 Modo: VISITANTE")
+    st.sidebar.info("👀 VISITANTE")
 
 df_elenco = carregar_elenco()
 
-# --- DEFINIÇÃO DE ABAS BASEADO NO PERFIL ---
+# --- NAVEGAÇÃO ---
 if user_role == "admin":
-    # Admin vê tudo
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "🎲 Sorteio", "📝 Súmula", "👥 Elenco", "💰 Financeiro", "📊 Estatísticas", "⚙️ Ajustes"
-    ])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🎲 Sorteio", "📝 Súmula", "👥 Elenco", "💰 Financeiro", "📊 Estatísticas", "⚙️ Ajustes"])
 elif user_role == "finance":
-    # Tesoureiro foca no dinheiro e vê estatísticas
     tab4, tab5 = st.tabs(["💰 Financeiro", "📊 Estatísticas"])
-    # As outras abas ficam vazias/invisíveis
-    tab1 = tab2 = tab3 = tab6 = st.container()
+    tab1=tab2=tab3=tab6=st.container()
 else:
-    # Visitante vê Estatísticas e Resumo Financeiro
     tab5, tab4 = st.tabs(["📊 Estatísticas", "💰 Financeiro"])
-    tab1 = tab2 = tab3 = tab6 = st.container()
+    tab1=tab2=tab3=tab6=st.container()
 
 # === ABA 1: SORTEIO ===
 if user_role == "admin":
@@ -243,22 +206,18 @@ if user_role == "admin":
         with c1:
             if not df_elenco.empty:
                 nomes = sorted(df_elenco['nome'].astype(str).tolist())
-                mens = st.multiselect("Presença (Ordem):", nomes, key="t1_m")
+                mens = st.multiselect("Presença:", nomes, key="t1_m")
                 diar = st.text_area("Diaristas:", key="t1_d")
-            else:
-                mens, diar = [], ""
+            else: mens, diar = [], ""
         with c2:
             if st.button("SORTEAR", type="primary"):
-                st.session_state['mem_m'] = mens
-                st.session_state['mem_d'] = diar
+                st.session_state['mem_m'] = mens; st.session_state['mem_d'] = diar
                 l_diar = [x.strip() for x in diar.split('\n') if x.strip()]
                 elenco = mens + l_diar
-                if not elenco:
-                    st.error("Ninguém selecionado!")
+                if not elenco: st.error("Ninguém selecionado!")
                 else:
                     MAX = 20
-                    tit = elenco[:MAX]
-                    res = elenco[MAX:]
+                    tit = elenco[:MAX]; res = elenco[MAX:]
                     p_df = df_elenco[df_elenco['nome'].isin(tit)]
                     vd = p_df[p_df['time']=='Verde']['nome'].tolist()
                     pt = p_df[p_df['time']=='Preto']['nome'].tolist()
@@ -280,7 +239,7 @@ if user_role == "admin":
                             idx = (MAX-1)-i
                             if idx>=0: st.write(f"{MAX+i+1}º {r} entra por {tit[idx]}")
 
-# === ABA 2: SÚMULA (COM CARD DE JOGO) ===
+# === ABA 2: SÚMULA ===
 if user_role == "admin":
     with tab2:
         st.header("Súmula")
@@ -292,21 +251,16 @@ if user_role == "admin":
         c1, c2 = st.columns(2)
         with c1:
             jog = st.multiselect("Jogaram:", mens_list, default=def_m)
-            dtx = st.text_area("Diaristas Súmula:", value=def_d)
+            dtx = st.text_area("Diaristas:", value=def_d)
             ld = [x.strip() for x in dtx.split('\n') if x.strip()]
             if not ld: ld = [x.strip() for x in dtx.split(',') if x.strip()]
-        with c2:
-            just = st.multiselect("Justificaram:", [m for m in mens_list if m not in jog])
+        with c2: just = st.multiselect("Justificaram:", [m for m in mens_list if m not in jog])
         
-        st.divider()
-        r1, r2 = st.columns(2)
+        st.divider(); r1, r2 = st.columns(2)
         v = r1.radio("Vencedor", ["Verde", "Preto", "Empate"], horizontal=True)
         with r2:
             lf = jog + ld
-            gm = {}
-            score_verde = 0
-            score_preto = 0
-            
+            gm = {}; score_verde = 0; score_preto = 0
             if lf:
                 qg = st.multiselect("Gols:", lf)
                 if qg:
@@ -316,12 +270,10 @@ if user_role == "admin":
                         if not df_elenco.empty:
                             row = df_elenco[df_elenco['nome'] == a]
                             if not row.empty: t_jog = row.iloc[0]['time']
-                        
                         gols = cols[i%3].number_input(f"{a}", 1, 20, 1, key=f"g_{a}")
                         gm[a] = gols
                         if t_jog == "Verde": score_verde += gols
                         elif t_jog == "Preto": score_preto += gols
-                        else: pass 
 
         c_save, c_print = st.columns([1, 1])
         if c_save.button("💾 SALVAR SÚMULA", type="primary"):
@@ -337,30 +289,25 @@ if user_role == "admin":
 
         if gm:
             with c_print:
-                placar_v_man = st.number_input("Placar Verde", value=score_verde, min_value=0)
-                placar_p_man = st.number_input("Placar Preto", value=score_preto, min_value=0)
+                placar_v_man = st.number_input("Verde", value=score_verde, min_value=0)
+                placar_p_man = st.number_input("Preto", value=score_preto, min_value=0)
                 img_card = gerar_card_jogo(str(dt), placar_v_man, placar_p_man, gm, df_elenco)
-                st.download_button("📸 Baixar Card do Jogo", img_card, f"jogo_{dt}.png", "image/png")
-
+                st.download_button("📸 Card do Jogo", img_card, f"jogo_{dt}.png", "image/png")
 
 # === ABA 3: ELENCO ===
 if user_role == "admin":
     with tab3:
         st.header("Gerenciar Elenco")
         c1, c2 = st.columns(2)
-        
         with c1:
-            st.subheader("➕ Adicionar Novo")
+            st.subheader("➕ Adicionar")
             n = st.text_input("Nome").strip()
             t = st.selectbox("Time", ["Verde", "Preto", "Ambos"])
             tp = st.selectbox("Tipo", ["Mensalista", "Diarista Frequente"])
-            if st.button("Adicionar Jogador"):
-                if not n: st.warning("Digite um nome!")
-                elif n in df_elenco['nome'].values: st.error("Já existe!")
-                else:
+            if st.button("Adicionar"):
+                if n and n not in df_elenco['nome'].values:
                     novo_df = pd.concat([df_elenco, pd.DataFrame([{"nome":n,"time":t,"tipo":tp}])], ignore_index=True)
-                    if save_data(novo_df, "elenco"): st.success("Adicionado!"); st.rerun()
-
+                    if save_data(novo_df, "elenco"): st.rerun()
         with c2:
             st.subheader("✏️ Editar")
             if not df_elenco.empty:
@@ -372,7 +319,6 @@ if user_role == "admin":
                         elif time == 'Preto': return f"{nome_original} 🖤"
                         elif time == 'Ambos': return f"{nome_original} (C)"
                     return nome_original
-
                 s = st.selectbox("Selecione:", sorted(df_elenco['nome'].astype(str).tolist()), format_func=formatar_nome_display)
                 if s:
                     r = df_elenco[df_elenco['nome']==s].iloc[0]
@@ -380,25 +326,26 @@ if user_role == "admin":
                     except: ix = 0
                     try: ixp = ["Mensalista","Diarista Frequente"].index(r['tipo'])
                     except: ixp = 0
-                    nt = st.selectbox("Novo Time:", ["Verde","Preto","Ambos"], index=ix, key="edit_time")
-                    ntp = st.selectbox("Novo Tipo:", ["Mensalista","Diarista Frequente"], index=ixp, key="edit_tipo")
-                    
-                    cb1, cb2 = st.columns(2)
-                    if cb1.button("💾 SALVAR"):
-                        df_elenco.loc[df_elenco['nome']==s, 'time'] = nt
-                        df_elenco.loc[df_elenco['nome']==s, 'tipo'] = ntp
+                    nt = st.selectbox("Novo Time:", ["Verde","Preto","Ambos"], index=ix)
+                    ntp = st.selectbox("Novo Tipo:", ["Mensalista","Diarista Frequente"], index=ixp)
+                    c_bt1, c_bt2 = st.columns(2)
+                    if c_bt1.button("Salvar"):
+                        df_elenco.loc[df_elenco['nome']==s, 'time'] = nt; df_elenco.loc[df_elenco['nome']==s, 'tipo'] = ntp
                         save_data(df_elenco, "elenco"); st.rerun()
-                    if cb2.button("🗑️ EXCLUIR"):
+                    if c_bt2.button("Excluir"):
                         save_data(df_elenco[df_elenco['nome']!=s], "elenco"); st.rerun()
 
-# === ABA 4: FINANCEIRO ===
+# === ABA 4: FINANCEIRO (COM FLUXO DE CAIXA PROTEGIDO) ===
 with tab4:
     st.header("💰 Financeiro")
+    
+    # 1. Carrega Mensalidades
     if not df_elenco.empty:
         df_mens = df_elenco[df_elenco['tipo'] == 'Mensalista'][['nome']].sort_values('nome')
         cols = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
         df_fin = load_data("financeiro", cols)
         
+        # Sincronia
         if not df_fin.empty:
             for nm in df_mens['nome']:
                 if nm not in df_fin['nome'].values:
@@ -407,43 +354,79 @@ with tab4:
                     df_fin = pd.concat([df_fin, pd.DataFrame([nv])], ignore_index=True)
             df_fin = df_fin[df_fin['nome'].isin(df_mens['nome'])]
         else:
-            df_fin = df_mens.copy()
+            df_fin = df_mens.copy(); 
             for c in cols[1:]: df_fin[c] = False
         
         for c in cols[1:]: df_fin[c] = df_fin[c].astype(str).str.upper() == 'TRUE'
+        
+    # 2. Carrega Gastos
+    cols_gastos = ["Data", "Descricao", "Valor"]
+    df_gastos = load_data("saidas", cols_gastos)
+    if not df_gastos.empty:
+        df_gastos["Valor"] = pd.to_numeric(df_gastos["Valor"], errors='coerce').fillna(0)
 
-        # PERMISSÃO DE EDIÇÃO: ADMIN OU TESOUREIRO (FINANCE)
-        if user_role in ["admin", "finance"]:
-            hoje = datetime.today()
-            meses_map = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
-            mes_atual = meses_map[hoje.month]
-            pagos = df_fin[df_fin[mes_atual] == True].shape[0]
-            total = df_fin.shape[0]
-            faltam = total - pagos
-            inadimplentes = faltam if hoje.day > 20 else 0
+    # --- ÁREA RESTRITA (ADMIN / TESOUREIRO) ---
+    if user_role in ["admin", "finance"]:
+        # CÁLCULOS TOTAIS
+        VALOR_MENSALIDADE = 30.0 
+        total_pagos_count = 0
+        for c in cols[1:]:
+            total_pagos_count += df_fin[c].sum()
+        
+        receita_total = total_pagos_count * VALOR_MENSALIDADE
+        despesas_total = df_gastos["Valor"].sum() if not df_gastos.empty else 0
+        saldo_caixa = receita_total - despesas_total
 
-            k1, k2, k3, k4 = st.columns(4)
-            k1.metric("Total", total)
-            k2.metric(f"Pagos ({mes_atual})", pagos)
-            k3.metric("Faltam", faltam)
-            if inadimplentes > 0: k4.metric("🚨 Inadimplentes", inadimplentes, delta="-Atrasados", delta_color="inverse")
-            else: k4.metric("Inadimplentes", "0", delta="OK")
+        # DASHBOARD DE CAIXA
+        st.subheader("Fluxo de Caixa")
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Total Arrecadado (Ano)", f"R$ {receita_total:,.2f}")
+        k2.metric("Total Despesas", f"R$ {despesas_total:,.2f}")
+        k3.metric("SALDO EM CAIXA 🏦", f"R$ {saldo_caixa:,.2f}", delta="Disponível")
+        
+        st.divider()
 
-            st.divider()
-            if user_role == "finance":
-                st.info("Modo Tesoureiro: Você tem permissão para editar os pagamentos.")
-            
+        # Sub-abas dentro do Financeiro
+        sub_tab1, sub_tab2 = st.tabs(["Recebimentos (Mensalidades)", "Lançar Despesas (Saídas)"])
+        
+        with sub_tab1:
+            st.info(f"Valor base: R$ {VALOR_MENSALIDADE},00.")
             edited = st.data_editor(df_fin, use_container_width=True, hide_index=True)
             if st.button("SALVAR PAGAMENTOS"):
                 save_data(edited, "financeiro"); st.success("Salvo!"); st.rerun()
-        else:
-            # Visitante
-            total = df_fin.shape[0]
-            st.metric("Total de Atletas Mensalistas", total)
-            st.info("ℹ️ Abaixo, a lista de mensalistas ativos.")
-            st.dataframe(df_fin[['nome']].rename(columns={"nome": "Atleta"}), use_container_width=True, hide_index=True)
+                
+        with sub_tab2:
+            st.write("Registre o que saiu do caixa.")
+            c_g1, c_g2, c_g3 = st.columns([1, 2, 1])
+            d_data = c_g1.date_input("Data Gasto", datetime.today())
+            d_desc = c_g2.text_input("Descrição (Ex: Bola)")
+            d_valor = c_g3.number_input("Valor (R$)", min_value=0.0, step=10.0)
+            
+            if st.button("➕ REGISTRAR SAÍDA"):
+                if d_desc and d_valor > 0:
+                    nova_saida = pd.DataFrame([{"Data": str(d_data), "Descricao": d_desc, "Valor": d_valor}])
+                    df_gastos = pd.concat([df_gastos, nova_saida], ignore_index=True)
+                    save_data(df_gastos, "saidas")
+                    st.success("Gasto registrado!")
+                    st.rerun()
+            
+            if not df_gastos.empty:
+                st.write("Histórico de Gastos:")
+                df_show_gastos = df_gastos.sort_values("Data", ascending=False)
+                st.dataframe(df_show_gastos, use_container_width=True, hide_index=True)
+                
+                if user_role == "admin":
+                    with st.expander("🗑️ Área de Perigo (Apagar Gastos)"):
+                        idx_del = st.selectbox("Apagar item:", df_gastos['Descricao'].unique())
+                        if st.button("Apagar Gasto Selecionado"):
+                             df_gastos = df_gastos[df_gastos['Descricao'] != idx_del]
+                             save_data(df_gastos, "saidas"); st.rerun()
+
     else:
-        st.warning("Sem dados.")
+        # --- VISITANTE (VISÃO SIMPLIFICADA) ---
+        st.info("ℹ️ Abaixo, a lista de mensalistas ativos. Detalhes financeiros restritos.")
+        st.caption("Mensalistas Ativos:")
+        st.dataframe(df_fin[['nome']].rename(columns={"nome": "Atleta"}), use_container_width=True, hide_index=True)
 
 # === ABA 5: ESTATÍSTICAS ===
 with tab5:
@@ -452,9 +435,9 @@ with tab5:
     if not hist.empty:
         vt = hist[['id','vencedor']].drop_duplicates()['vencedor'].value_counts()
         c1,c2,c3 = st.columns(3)
-        c1.metric("Time Verde 🦉 💚", vt.get("Verde",0))
-        c2.metric("Time Preto 🦉 🖤", vt.get("Preto",0))
-        c3.metric("Empates 🤝", vt.get("Empate",0))
+        c1.metric("Verde 🦉 💚", vt.get("Verde",0))
+        c2.metric("Preto 🦉 🖤", vt.get("Preto",0))
+        c3.metric("Empates", vt.get("Empate",0))
         
         ca, cb = st.columns(2)
         with ca:
@@ -468,10 +451,8 @@ with tab5:
                 g_site['jogador'] = g_site.apply(lambda x: f"🥇 {x['jogador']}" if x['gols'] == max_gols else x['jogador'], axis=1)
             st.dataframe(g_site, use_container_width=True, hide_index=True)
             
-            g_print = g.copy()
-            g_print.columns = ["ATLETA", "GOLS"]
-            img_buffer_art = gerar_imagem_bonita(g_print, titulo="ARTILHARIA MADRUGAO")
-            st.download_button("📸 Baixar Artilharia", img_buffer_art, "artilharia.png", "image/png")
+            g_print = g.copy(); g_print.columns = ["ATLETA", "GOLS"]
+            st.download_button("📸 Baixar Artilharia", gerar_imagem_bonita(g_print, "ARTILHARIA"), "artilharia.png", "image/png")
 
         with cb:
             st.subheader("Presença")
@@ -481,19 +462,15 @@ with tab5:
             f['Total'] = f['Jogos'] + f['Justif.']
             st.dataframe(f.sort_values('Jogos', ascending=False), use_container_width=True)
 
-        st.divider()
-        st.subheader("📈 Corrida da Artilharia")
+        st.divider(); st.subheader("📈 Corrida da Artilharia")
         df_gols = hist[(hist['tipo_registro'] == 'Jogo')]
         if not df_gols.empty:
             pivot = df_gols.pivot_table(index='data', columns='jogador', values='gols', aggfunc='sum').fillna(0)
             st.line_chart(pivot.cumsum())
-        else:
-            st.info("Sem dados de gols para gerar gráfico.")
+        else: st.info("Sem dados.")
+    else: st.info("Sem dados.")
 
-    else:
-        st.info("Sem dados ainda.")
-
-# === ABA 6: AJUSTES (SÓ ADMIN) ===
+# === ABA 6: AJUSTES ===
 if user_role == "admin":
     with tab6:
         st.header("Ajustes")
@@ -506,10 +483,5 @@ if user_role == "admin":
                 if c2.button("Apagar", key=f"d_{r['id']}"):
                     save_data(hist[hist['id']!=r['id']], "jogos"); st.rerun()
 
-# --- CRÉDITOS ---
 st.write(""); st.write(""); st.divider()
-st.markdown(
-    """<div style='text-align: center; color: grey; font-size: 14px;'>
-    Desenvolvido por <b>Lucas Guilherme</b> | 📱 (81) 99964-4971 (wpp)
-    </div>""", unsafe_allow_html=True
-)
+st.markdown("""<div style='text-align: center; color: grey; font-size: 14px;'>Desenvolvido por <b>Lucas Guilherme</b> | 📱 (81) 99964-4971 (wpp)</div>""", unsafe_allow_html=True)
