@@ -7,6 +7,7 @@ import random
 import matplotlib.pyplot as plt
 import io
 import os
+import time
 
 # --- CONFIGURAÇÕES ---
 st.set_page_config(page_title="Pelada Madrugão", page_icon="🦉", layout="wide")
@@ -22,7 +23,9 @@ with st.sidebar:
 # --- TÍTULO ---
 st.title("Pelada Madrugão 🦉 💚 🖤")
 
-# --- CONEXÃO ---
+# --- CONEXÃO INTELIGENTE (CACHE) ---
+# @st.cache_resource evita conectar no Google toda vez. Conecta uma vez e segura a conexão.
+@st.cache_resource
 def get_connection():
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
@@ -33,8 +36,13 @@ def get_connection():
         scopes=scopes
     )
     client = gspread.authorize(creds)
+    # Abre a planilha uma vez e retorna o objeto Spreadsheet
     return client.open_by_key("1OSxEwiE3voMOd-EI6CJ034torY-K7oFoz8EReyXkmPA")
 
+# --- LEITURA DE DADOS (CACHE) ---
+# @st.cache_data(ttl=60) guarda os dados por 60 segundos.
+# Isso reduz drasticamente o consumo da cota do Google.
+@st.cache_data(ttl=60)
 def load_data(sheet_name, expected_cols):
     try:
         sh = get_connection()
@@ -51,9 +59,15 @@ def load_data(sheet_name, expected_cols):
                 df[col] = ""
         return df
     except Exception as e:
+        # Se der erro de cota, espera um pouco e tenta de novo (Backoff)
+        if "429" in str(e):
+            time.sleep(2)
+            st.warning("Muitos acessos. Aguardando Google liberar...")
+            return pd.DataFrame(columns=expected_cols)
         st.error(f"Erro ao ler dados ({sheet_name}): {e}")
         return pd.DataFrame(columns=expected_cols)
 
+# --- SALVAR DADOS (LIMPA O CACHE) ---
 def save_data(df, sheet_name):
     try:
         sh = get_connection()
@@ -65,6 +79,9 @@ def save_data(df, sheet_name):
         worksheet.clear()
         dados = [df.columns.values.tolist()] + df.values.tolist()
         worksheet.update(range_name='A1', values=dados)
+        
+        # O PULO DO GATO: Limpa o cache para mostrar os dados novos imediatamente
+        st.cache_data.clear()
         return True
     except Exception as e:
         st.error(f"Erro ao salvar ({sheet_name}): {e}")
