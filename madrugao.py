@@ -239,9 +239,16 @@ if user_role == "admin":
                         dn = f"{c} (D)" if c in d_tit else c
                         if len(verde) <= len(preto): verde.append(dn)
                         else: preto.append(dn)
+                    
+                    # MOSTRA OS TIMES
                     ca, cb = st.columns(2)
                     ca.success(f"VERDE ({len(verde)})"); [ca.write(f"- {x}") for x in verde]
                     cb.error(f"PRETO ({len(preto)})"); [cb.write(f"- {x}") for x in preto]
+                    
+                    # OBSERVAÇÃO DE DESEQUILÍBRIO (NOVIDADE)
+                    st.write("")
+                    st.info("⚠️ **Nota da Diretoria:** Caso a presença por cor seja desproporcional (ex: 13 Verdes vs 7 Pretos), os ADMs farão o remanejamento manual dos atletas na hora para equilibrar os times.")
+
                     if res:
                         st.divider(); st.write("**Reservas:**")
                         for i, r in enumerate(res):
