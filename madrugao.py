@@ -270,7 +270,7 @@ if is_admin:
                             st.warning(f"{s} removido!")
                             st.rerun()
 
-# === ABA 4: FINANCEIRO (RESUMO SÓ PARA ADMIN) ===
+# === ABA 4: FINANCEIRO ===
 with tab4:
     st.header("💰 Financeiro")
     if not df_elenco.empty:
@@ -290,9 +290,8 @@ with tab4:
             df_fin = df_mens.copy()
             for c in cols[1:]: df_fin[c] = False
         
-        # SEPARAÇÃO DO QUE CADA UM VÊ
         if is_admin:
-            # --- DASHBOARD (EXCLUSIVO ADMIN) ---
+            # --- DASHBOARD ---
             hoje = datetime.today()
             meses_map = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
             mes_atual = meses_map[hoje.month]
@@ -321,29 +320,34 @@ with tab4:
                     st.success("Financeiro Atualizado!")
                     st.rerun()
         else:
-            # --- VISITANTE (SÓ VÊ A TABELA, SEM DASHBOARD) ---
             st.info("Transparência: Confira abaixo a lista de pagamentos.")
             st.dataframe(df_fin, use_container_width=True, hide_index=True)
     else:
         st.warning("Sem dados.")
 
-# === ABA 5: ESTATÍSTICAS ===
+# === ABA 5: ESTATÍSTICAS (COM MEDALHAS E EMOJIS) ===
 with tab5:
     st.header("📊 Estatísticas")
     hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
     if not hist.empty:
         vt = hist[['id','vencedor']].drop_duplicates()['vencedor'].value_counts()
         c1,c2,c3 = st.columns(3)
-        c1.metric("Verde", vt.get("Verde",0))
-        c2.metric("Preto", vt.get("Preto",0))
-        c3.metric("Empates", vt.get("Empate",0))
+        c1.metric("Time Verde 🦉 💚", vt.get("Verde",0))
+        c2.metric("Time Preto 🦉 🖤", vt.get("Preto",0))
+        c3.metric("Empates 🤝", vt.get("Empate",0))
         
         ca, cb = st.columns(2)
         with ca:
             st.subheader("Artilharia")
             hist['gols'] = pd.to_numeric(hist['gols'], errors='coerce').fillna(0)
             g = hist[hist['gols']>0].groupby("jogador")['gols'].sum().sort_values(ascending=False).reset_index()
-            st.dataframe(g, use_container_width=True)
+            
+            # --- LÓGICA DA MEDALHA DE OURO ---
+            if not g.empty:
+                max_gols = g['gols'].max()
+                g['jogador'] = g.apply(lambda x: f"🥇 {x['jogador']}" if x['gols'] == max_gols else x['jogador'], axis=1)
+
+            st.dataframe(g, use_container_width=True, hide_index=True)
         with cb:
             st.subheader("Presença")
             j = hist[hist['tipo_registro']=='Jogo'].groupby("jogador").size().rename("Jogos")
