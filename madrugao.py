@@ -8,49 +8,61 @@ import random
 # --- CONFIGURAÇÕES ---
 st.set_page_config(page_title="Pelada Madrugão", page_icon="⚽", layout="wide")
 
+st.title("⚽ Gestão Madrugão")
+
+# --- DEBUG DE SEGURANÇA (O Dedo-Duro) ---
+# Isso vai mostrar na tela qual e-mail o robô está usando.
+try:
+    email_robo = st.secrets["gcp_service_account"]["client_email"]
+    st.info(f"💡 DICA DE ACESSO: O e-mail do robô é: {email_robo}")
+    st.warning("👉 Se der erro, copie esse e-mail acima, vá na sua Planilha Google > Compartilhar > e cole ele lá como EDITOR.")
+except:
+    st.error("Erro nos Segredos: Não consegui ler o e-mail do robô.")
+
 # --- CONEXÃO COM GOOGLE SHEETS ---
 def get_connection():
-    # Define o escopo de permissão
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
-    # Pega as credenciais que estarão salvas nos Segredos do Streamlit Cloud
     creds = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
         scopes=scopes
     )
     client = gspread.authorize(creds)
-    # Abre a planilha pelo nome
-    return client.open("1OSxEwiE3voMOd-EI6CJ034torY-K7oFoz8EReyXkmPA")
+    
+    # --- AQUI ESTAVA O ERRO, AGORA ESTÁ CORRIGIDO ---
+    # Usando open_by_key com o ID que você mandou
+    return client.open_by_key("1OSxEwiE3voMOd-EI6CJ034torY-K7oFoz8EReyXkmPA")
 
-# Função para ler dados de uma aba específica
+# Função para ler dados
 def load_data(sheet_name, expected_cols):
     try:
         sh = get_connection()
-        worksheet = sh.worksheet(sheet_name)
+        try:
+            worksheet = sh.worksheet(sheet_name)
+        except:
+            return pd.DataFrame(columns=expected_cols)
+            
         data = worksheet.get_all_records()
         if not data:
             return pd.DataFrame(columns=expected_cols)
         return pd.DataFrame(data)
     except Exception as e:
-        # Se a aba estiver vazia ou der erro, retorna vazio
         return pd.DataFrame(columns=expected_cols)
 
-# Função para salvar dados (apaga tudo e reescreve - simples e seguro)
+# Função para salvar dados
 def save_data(df, sheet_name):
     sh = get_connection()
     try:
         worksheet = sh.worksheet(sheet_name)
     except:
-        # Se a aba não existir, cria ela
         worksheet = sh.add_worksheet(title=sheet_name, rows=100, cols=20)
     
     worksheet.clear()
-    # Adiciona cabeçalho + dados
     worksheet.update([df.columns.values.tolist()] + df.values.tolist())
 
-# --- LISTA PADRÃO (SE A PLANILHA ESTIVER VAZIA) ---
+# --- LISTA PADRÃO ---
 LISTA_PADRAO = [
     {"nome": "Alex", "time": "Verde", "tipo": "Mensalista"},
     {"nome": "Anderson", "time": "Verde", "tipo": "Mensalista"},
@@ -87,16 +99,18 @@ LISTA_PADRAO = [
     {"nome": "Professor", "time": "Ambos", "tipo": "Mensalista"},
 ]
 
-# Inicializa elenco se estiver vazio
 def carregar_elenco():
     df = load_data("elenco", ["nome", "time", "tipo"])
     if df.empty:
         df = pd.DataFrame(LISTA_PADRAO)
-        save_data(df, "elenco")
+        # Tenta salvar a lista inicial apenas se a conexão funcionar
+        try:
+            save_data(df, "elenco")
+        except:
+            pass # Se der erro aqui, é permissão, o usuário vai ver o aviso lá em cima
     return df
 
-# --- LOGIN E SEGURANÇA ---
-# Pega a senha dos segredos da nuvem (ou usa padrão local para teste)
+# --- LOGIN ---
 SENHA_ADMIN = st.secrets.get("admin_password", "1234")
 
 st.sidebar.title("🔒 Área Restrita")
@@ -108,18 +122,10 @@ if is_admin:
 else:
     st.sidebar.info("Modo Visitante")
 
-st.title("⚽ Gestão Madrugão")
-
-# --- DEBUG (Apagar depois que funcionar) ---
-try:
-    st.write("Tentando conectar com o e-mail:", st.secrets["gcp_service_account"]["client_email"])
-except:
-    st.error("Não consegui ler o e-mail dos segredos.")
-
-# Carrega dados da nuvem
+# Carrega elenco (pode demorar um pouco na primeira vez)
 df_elenco = carregar_elenco()
 
-# Controle de abas
+# Abas
 if is_admin:
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🎲 Sorteio", "📝 Súmula", "👥 Elenco", "💰 Financeiro", "📊 Estatísticas", "⚙️ Ajustes"
@@ -135,10 +141,15 @@ if is_admin:
         st.header("Montar Times")
         col_input, col_result = st.columns([1, 2])
         with col_input:
-            lista_nomes = df_elenco['nome'].tolist()
-            lista_nomes.sort()
-            presentes_mensalistas = st.multiselect("Selecione (Ordem de Chegada):", lista_nomes, key="t1_mens")
-            diaristas_txt = st.text_area("Diaristas:", key="t1_diar")
+            if not df_elenco.empty:
+                lista_nomes = df_elenco['nome'].tolist()
+                lista_nomes.sort()
+                presentes_mensalistas = st.multiselect("Selecione (Ordem de Chegada):", lista_nomes, key="t1_mens")
+                diaristas_txt = st.text_area("Diaristas:", key="t1_diar")
+            else:
+                st.error("Erro ao carregar elenco. Verifique a permissão da planilha.")
+                presentes_mensalistas = []
+                diaristas_txt = ""
         
         with col_result:
             if st.button("SORTEAR TIMES", type="primary"):
@@ -185,48 +196,49 @@ if is_admin:
     with tab2:
         st.header("Registrar Jogo")
         data_jogo = st.date_input("Data", datetime.today())
-        mensalistas = sorted(df_elenco['nome'].tolist())
         
-        def_mens = [x for x in st.session_state.get('mem_mens', []) if x in mensalistas]
-        def_diar = st.session_state.get('mem_diar', "")
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            jogaram = st.multiselect("Jogaram:", mensalistas, default=def_mens)
-            diar_txt = st.text_area("Diaristas (Súmula):", value=def_diar)
-            l_diar = [x.strip() for x in diar_txt.split('\n') if x.strip()]
-            if not l_diar: l_diar = [x.strip() for x in diar_txt.split(',') if x.strip()]
-        with c2:
-            justif = st.multiselect("Justificaram:", [m for m in mensalistas if m not in jogaram])
+        if not df_elenco.empty:
+            mensalistas = sorted(df_elenco['nome'].tolist())
+            def_mens = [x for x in st.session_state.get('mem_mens', []) if x in mensalistas]
+            def_diar = st.session_state.get('mem_diar', "")
             
-        st.divider()
-        cr1, cr2 = st.columns(2)
-        venc = cr1.radio("Resultado", ["Verde", "Preto", "Empate"], horizontal=True)
-        
-        with cr2:
-            l_final = jogaram + l_diar
-            gols_map = {}
-            if l_final:
-                quem_gol = st.multiselect("Artilheiros:", l_final)
-                if quem_gol:
-                    cg = st.columns(3)
-                    for i, art in enumerate(quem_gol):
-                        gols_map[art] = cg[i%3].number_input(f"{art}", 1, 20, 1, key=f"g_{art}")
-        
-        if st.button("💾 SALVAR NA NUVEM", type="primary"):
-            try:
-                df_hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
-                gid = int(datetime.now().timestamp())
-                novos = []
-                for p in l_final:
-                    novos.append({"id": gid, "data": str(data_jogo), "jogador": p, "tipo_registro": "Jogo", "gols": gols_map.get(p, 0), "vencedor": venc})
-                for j in justif:
-                    novos.append({"id": gid, "data": str(data_jogo), "jogador": j, "tipo_registro": "Justificado", "gols": 0, "vencedor": ""})
+            c1, c2 = st.columns(2)
+            with c1:
+                jogaram = st.multiselect("Jogaram:", mensalistas, default=def_mens)
+                diar_txt = st.text_area("Diaristas (Súmula):", value=def_diar)
+                l_diar = [x.strip() for x in diar_txt.split('\n') if x.strip()]
+                if not l_diar: l_diar = [x.strip() for x in diar_txt.split(',') if x.strip()]
+            with c2:
+                justif = st.multiselect("Justificaram:", [m for m in mensalistas if m not in jogaram])
                 
-                save_data(pd.concat([df_hist, pd.DataFrame(novos)]), "jogos")
-                st.toast("Salvo no Google Sheets!", icon="✅")
-            except Exception as e:
-                st.error(f"Erro ao salvar: {e}")
+            st.divider()
+            cr1, cr2 = st.columns(2)
+            venc = cr1.radio("Resultado", ["Verde", "Preto", "Empate"], horizontal=True)
+            
+            with cr2:
+                l_final = jogaram + l_diar
+                gols_map = {}
+                if l_final:
+                    quem_gol = st.multiselect("Artilheiros:", l_final)
+                    if quem_gol:
+                        cg = st.columns(3)
+                        for i, art in enumerate(quem_gol):
+                            gols_map[art] = cg[i%3].number_input(f"{art}", 1, 20, 1, key=f"g_{art}")
+            
+            if st.button("💾 SALVAR NA NUVEM", type="primary"):
+                try:
+                    df_hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
+                    gid = int(datetime.now().timestamp())
+                    novos = []
+                    for p in l_final:
+                        novos.append({"id": gid, "data": str(data_jogo), "jogador": p, "tipo_registro": "Jogo", "gols": gols_map.get(p, 0), "vencedor": venc})
+                    for j in justif:
+                        novos.append({"id": gid, "data": str(data_jogo), "jogador": j, "tipo_registro": "Justificado", "gols": 0, "vencedor": ""})
+                    
+                    save_data(pd.concat([df_hist, pd.DataFrame(novos)]), "jogos")
+                    st.toast("Salvo no Google Sheets!", icon="✅")
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
 
 # === ABA 3: ELENCO ===
 if is_admin:
@@ -243,45 +255,52 @@ if is_admin:
                     save_data(pd.concat([df_elenco, novo], ignore_index=True), "elenco")
                     st.rerun()
         with c2:
-            sel = st.selectbox("Editar:", df_elenco['nome'].tolist())
-            if sel:
-                row = df_elenco[df_elenco['nome'] == sel].iloc[0]
-                nnt = st.selectbox("Time:", ["Verde", "Preto", "Ambos"], index=["Verde", "Preto", "Ambos"].index(row['time']))
-                nntp = st.selectbox("Tipo:", ["Mensalista", "Diarista Frequente"], index=0)
-                cb1, cb2 = st.columns(2)
-                if cb1.button("Salvar"):
-                    df_elenco.loc[df_elenco['nome'] == sel, 'time'] = nnt
-                    df_elenco.loc[df_elenco['nome'] == sel, 'tipo'] = nntp
-                    save_data(df_elenco, "elenco")
-                    st.rerun()
-                if cb2.button("Excluir"):
-                    save_data(df_elenco[df_elenco['nome'] != sel], "elenco")
-                    st.rerun()
+            if not df_elenco.empty:
+                sel = st.selectbox("Editar:", df_elenco['nome'].tolist())
+                if sel:
+                    row = df_elenco[df_elenco['nome'] == sel].iloc[0]
+                    # Indice seguro
+                    try:
+                        idx_time = ["Verde", "Preto", "Ambos"].index(row['time'])
+                    except:
+                        idx_time = 0
+                    
+                    nnt = st.selectbox("Time:", ["Verde", "Preto", "Ambos"], index=idx_time)
+                    nntp = st.selectbox("Tipo:", ["Mensalista", "Diarista Frequente"], index=0)
+                    cb1, cb2 = st.columns(2)
+                    if cb1.button("Salvar"):
+                        df_elenco.loc[df_elenco['nome'] == sel, 'time'] = nnt
+                        df_elenco.loc[df_elenco['nome'] == sel, 'tipo'] = nntp
+                        save_data(df_elenco, "elenco")
+                        st.rerun()
+                    if cb2.button("Excluir"):
+                        save_data(df_elenco[df_elenco['nome'] != sel], "elenco")
+                        st.rerun()
 
 # === ABA 4: FINANCEIRO ===
 if is_admin:
     with tab4:
         st.header("Financeiro")
-        df_mens = df_elenco[df_elenco['tipo'] == 'Mensalista'][['nome']].sort_values('nome')
-        cols_fin = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-        df_fin = load_data("financeiro", cols_fin)
-        
-        # Sincroniza nomes
-        if not df_fin.empty:
-            for nome in df_mens['nome']:
-                if nome not in df_fin['nome'].values:
-                    nova = {k: False for k in cols_fin if k != 'nome'}
-                    nova['nome'] = nome
-                    df_fin = pd.concat([df_fin, pd.DataFrame([nova])], ignore_index=True)
-            df_fin = df_fin[df_fin['nome'].isin(df_mens['nome'])]
-        else:
-            df_fin = df_mens.copy()
-            for c in cols_fin[1:]: df_fin[c] = False
+        if not df_elenco.empty:
+            df_mens = df_elenco[df_elenco['tipo'] == 'Mensalista'][['nome']].sort_values('nome')
+            cols_fin = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+            df_fin = load_data("financeiro", cols_fin)
             
-        edited = st.data_editor(df_fin, use_container_width=True, hide_index=True)
-        if st.button("Salvar Pagamentos"):
-            save_data(edited, "financeiro")
-            st.success("Salvo!")
+            if not df_fin.empty:
+                for nome in df_mens['nome']:
+                    if nome not in df_fin['nome'].values:
+                        nova = {k: False for k in cols_fin if k != 'nome'}
+                        nova['nome'] = nome
+                        df_fin = pd.concat([df_fin, pd.DataFrame([nova])], ignore_index=True)
+                df_fin = df_fin[df_fin['nome'].isin(df_mens['nome'])]
+            else:
+                df_fin = df_mens.copy()
+                for c in cols_fin[1:]: df_fin[c] = False
+                
+            edited = st.data_editor(df_fin, use_container_width=True, hide_index=True)
+            if st.button("Salvar Pagamentos"):
+                save_data(edited, "financeiro")
+                st.success("Salvo!")
 
 # === ABA 5: ESTATÍSTICAS ===
 with tab5:
@@ -297,7 +316,6 @@ with tab5:
         ca, cf = st.columns(2)
         with ca:
             st.subheader("Artilharia")
-            # Força conversão para numérico para evitar erro de string
             df_hist['gols'] = pd.to_numeric(df_hist['gols'], errors='coerce').fillna(0)
             g = df_hist[df_hist['gols'] > 0].groupby("jogador")['gols'].sum().sort_values(ascending=False).reset_index()
             st.dataframe(g, use_container_width=True)
