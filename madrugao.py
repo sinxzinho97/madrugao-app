@@ -13,12 +13,10 @@ st.set_page_config(page_title="Pelada Madrugão", page_icon="🦉", layout="wide
 
 # --- BARRA LATERAL COM LOGO ---
 with st.sidebar:
-    # Tenta mostrar a logo se ela existir no GitHub
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
     else:
         st.warning("⚠️ Para ver a logo, suba o arquivo 'logo.png' no GitHub.")
-    
     st.title("🔒 Área Restrita")
 
 # --- TÍTULO PRINCIPAL ---
@@ -72,44 +70,46 @@ def save_data(df, sheet_name):
         st.error(f"Erro ao salvar: {e}")
         return False
 
-# --- NOVA FUNÇÃO DE PRINT (ESTILO HD) ---
+# --- FUNÇÃO GERADORA DE IMAGEM (PRINT HD SEM EMOJI) ---
 def gerar_imagem_bonita(df, titulo="Relatório"):
     # Configurações de Design
-    cor_cabecalho = '#2E7D32' # Verde Madrugão
+    cor_cabecalho = '#1b5e20' # Verde Escuro Profissional
     cor_texto_cabecalho = 'white'
-    cor_linha_par = '#E8F5E9' # Verde bem clarinho
+    cor_linha_par = '#f1f8e9' # Verde muito claro
     cor_linha_impar = 'white'
     
-    # Cria a figura com alta resolução
-    fig, ax = plt.subplots(figsize=(10, len(df) * 0.6 + 2)) 
+    # Ajuste de tamanho dinâmico (mais altura por linha para nitidez)
+    fig, ax = plt.subplots(figsize=(12, len(df) * 0.8 + 2)) 
     ax.axis('tight')
     ax.axis('off')
     
     # Título
-    plt.title(titulo, fontsize=18, weight='bold', color='#1b5e20', pad=20)
+    plt.title(titulo.upper(), fontsize=20, weight='bold', color='#1b5e20', pad=25)
     
     # Cria a tabela
     tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center')
     
     # Estilização Profissional
     tabela.auto_set_font_size(False)
-    tabela.set_fontsize(12)
-    tabela.scale(1.2, 1.8) # Aumenta altura das células
+    tabela.set_fontsize(14) # Fonte maior
+    tabela.scale(1.2, 2.0) # Células mais altas
     
     for (row, col), cell in tabela.get_celld().items():
-        cell.set_edgecolor('white') # Remove bordas pretas feias
-        cell.set_height(0.08)
+        cell.set_edgecolor('#cfd8dc') # Borda cinza suave
+        cell.set_linewidth(1)
         
         if row == 0: # Cabeçalho
             cell.set_facecolor(cor_cabecalho)
             cell.set_text_props(color=cor_texto_cabecalho, weight='bold')
+            cell.set_height(0.12) # Cabeçalho mais alto
         else: # Linhas de dados
+            cell.set_height(0.1)
             if row % 2 == 0:
                 cell.set_facecolor(cor_linha_par)
             else:
                 cell.set_facecolor(cor_linha_impar)
     
-    # Salva
+    # Salva com qualidade máxima (300 DPI)
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=300, transparent=False)
     buf.seek(0)
@@ -334,7 +334,7 @@ with tab4:
         cols = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
         df_fin = load_data("financeiro", cols)
         
-        # Sincronia de nomes
+        # Sincronia
         if not df_fin.empty:
             for nm in df_mens['nome']:
                 if nm not in df_fin['nome'].values:
@@ -375,20 +375,20 @@ with tab4:
 
             st.divider()
             
-            # --- ÁREA DE DOWNLOAD (PRINT) ---
+            # --- ÁREA DE DOWNLOAD (PRINT SEM EMOJI) ---
             st.info("Modo Admin: Marque as caixas e clique em Salvar.")
             col_print, col_table = st.columns([1, 4])
             
             with col_print:
-                # Prepara dados para o print HD
+                # Prepara dados LIMPOS para o print
                 df_print = df_fin.copy()
                 cols_print = ["nome", mes_atual]
                 df_print = df_print[cols_print]
-                # Usa Sim/Não para ficar mais bonito na imagem
+                # Usa TEXTO em vez de Emoji para garantir a qualidade
                 df_print[mes_atual] = df_print[mes_atual].apply(lambda x: "PAGO" if x else "PENDENTE")
-                df_print.columns = ["Atleta", f"Mês {mes_atual}"]
+                df_print.columns = ["ATLETA", f"MES {mes_atual.upper()}"]
                 
-                img_buffer = gerar_imagem_bonita(df_print, titulo=f"Financeiro Madrugão - {mes_atual}")
+                img_buffer = gerar_imagem_bonita(df_print, titulo=f"FINANCEIRO - {mes_atual.upper()}")
                 st.download_button(
                     label="📸 Baixar Relatório",
                     data=img_buffer,
@@ -403,7 +403,7 @@ with tab4:
                     st.success("Financeiro Atualizado!")
                     st.rerun()
         else:
-            # --- VISITANTE VÊ LISTA DE NOMES ---
+            # --- VISITANTE ---
             total = df_fin.shape[0]
             st.metric("Total de Atletas Mensalistas", total)
             st.info("ℹ️ Abaixo, a lista de mensalistas ativos. Detalhes de pagamento são restritos.")
@@ -430,15 +430,20 @@ with tab5:
             hist['gols'] = pd.to_numeric(hist['gols'], errors='coerce').fillna(0)
             g = hist[hist['gols']>0].groupby("jogador")['gols'].sum().sort_values(ascending=False).reset_index()
             
-            if not g.empty:
-                max_gols = g['gols'].max()
-                g['jogador'] = g.apply(lambda x: f"🥇 {x['jogador']}" if x['gols'] == max_gols else x['jogador'], axis=1)
+            # --- VERSÃO PARA O SITE (COM MEDALHA) ---
+            g_site = g.copy()
+            if not g_site.empty:
+                max_gols = g_site['gols'].max()
+                g_site['jogador'] = g_site.apply(lambda x: f"🥇 {x['jogador']}" if x['gols'] == max_gols else x['jogador'], axis=1)
 
-            st.dataframe(g, use_container_width=True, hide_index=True)
+            st.dataframe(g_site, use_container_width=True, hide_index=True)
             
-            # --- BOTÃO DE DOWNLOAD ARTILHARIA (HD) ---
+            # --- VERSÃO PARA O PRINT (SEM MEDALHA, TEXTO LIMPO) ---
             st.write("")
-            img_buffer_art = gerar_imagem_bonita(g, titulo="Artilharia Madrugão")
+            g_print = g.copy() # Usa o original sem medalha
+            g_print.columns = ["ATLETA", "GOLS"]
+            img_buffer_art = gerar_imagem_bonita(g_print, titulo="ARTILHARIA MADRUGAO")
+            
             st.download_button(
                 label="📸 Baixar Artilharia",
                 data=img_buffer_art,
