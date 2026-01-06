@@ -6,9 +6,10 @@ from datetime import datetime
 import random
 
 # --- CONFIGURAÇÕES ---
-st.set_page_config(page_title="Pelada Madrugão", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="Pelada Madrugão", page_icon="🦉", layout="wide")
 
-st.title("⚽ Gestão Madrugão")
+# --- TÍTULO ATUALIZADO ---
+st.title("Pelada Madrugão 🦉 💚 🖤")
 
 # --- CONEXÃO COM GOOGLE SHEETS ---
 def get_connection():
@@ -278,7 +279,7 @@ with tab4:
         cols = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
         df_fin = load_data("financeiro", cols)
         
-        # Sincronia
+        # Sincronia de nomes
         if not df_fin.empty:
             for nm in df_mens['nome']:
                 if nm not in df_fin['nome'].values:
@@ -290,14 +291,19 @@ with tab4:
             df_fin = df_mens.copy()
             for c in cols[1:]: df_fin[c] = False
         
+        # Converte para Booleano (Checkboxes)
+        for c in cols[1:]:
+            df_fin[c] = df_fin[c].astype(str).str.upper() == 'TRUE'
+
+        # SEPARAÇÃO DE VISÃO
         if is_admin:
-            # --- DASHBOARD ---
+            # --- DASHBOARD (SÓ ADMIN) ---
             hoje = datetime.today()
             meses_map = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
             mes_atual = meses_map[hoje.month]
             dia_hoje = hoje.day
 
-            pagos = df_fin[df_fin[mes_atual].apply(lambda x: x == True or str(x).upper() == "TRUE")].shape[0]
+            pagos = df_fin[df_fin[mes_atual] == True].shape[0]
             total = df_fin.shape[0]
             faltam = total - pagos
             inadimplentes = faltam if dia_hoje > 20 else 0
@@ -313,19 +319,23 @@ with tab4:
                 k4.metric("Inadimplentes", "0", delta="No prazo")
 
             st.divider()
-            st.info("Modo Admin: Edite e salve.")
+            st.info("Modo Admin: Marque as caixas e clique em Salvar.")
+            
+            # Tabela Editável
             edited = st.data_editor(df_fin, use_container_width=True, hide_index=True)
             if st.button("SALVAR PAGAMENTOS"):
                 if save_data(edited, "financeiro"):
                     st.success("Financeiro Atualizado!")
                     st.rerun()
         else:
-            st.info("Transparência: Confira abaixo a lista de pagamentos.")
-            st.dataframe(df_fin, use_container_width=True, hide_index=True)
+            # --- VISITANTE (SÓ VÊ TOTAL) ---
+            total = df_fin.shape[0]
+            st.metric("Total de Atletas Mensalistas", total)
+            st.info("ℹ️ Os detalhes de pagamentos são restritos à administração.")
     else:
-        st.warning("Sem dados.")
+        st.warning("Sem dados de mensalistas.")
 
-# === ABA 5: ESTATÍSTICAS (COM MEDALHAS E EMOJIS) ===
+# === ABA 5: ESTATÍSTICAS ===
 with tab5:
     st.header("📊 Estatísticas")
     hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
@@ -342,7 +352,6 @@ with tab5:
             hist['gols'] = pd.to_numeric(hist['gols'], errors='coerce').fillna(0)
             g = hist[hist['gols']>0].groupby("jogador")['gols'].sum().sort_values(ascending=False).reset_index()
             
-            # --- LÓGICA DA MEDALHA DE OURO ---
             if not g.empty:
                 max_gols = g['gols'].max()
                 g['jogador'] = g.apply(lambda x: f"🥇 {x['jogador']}" if x['gols'] == max_gols else x['jogador'], axis=1)
