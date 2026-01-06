@@ -207,7 +207,7 @@ else:
     tab6, tab4, tab5 = st.tabs(["📊 Estatísticas", "💰 Financeiro", "🏦 Cofre"])
     tab1=tab2=tab3=tab7=st.container()
 
-# === ABA 1: SORTEIO ===
+# === ABA 1: SORTEIO (CORRIGIDO PARA NÃO MOSTRAR NULL) ===
 if user_role == "admin":
     with tab1:
         st.header("Montar Times")
@@ -240,12 +240,17 @@ if user_role == "admin":
                         if len(verde) <= len(preto): verde.append(dn)
                         else: preto.append(dn)
                     
-                    # MOSTRA OS TIMES
+                    # CORREÇÃO AQUI: LOOP TRADICIONAL
                     ca, cb = st.columns(2)
-                    ca.success(f"VERDE ({len(verde)})"); [ca.write(f"- {x}") for x in verde]
-                    cb.error(f"PRETO ({len(preto)})"); [cb.write(f"- {x}") for x in preto]
                     
-                    # OBSERVAÇÃO DE DESEQUILÍBRIO (NOVIDADE)
+                    ca.success(f"VERDE ({len(verde)})")
+                    for x in verde:
+                        ca.write(f"- {x}")
+                    
+                    cb.error(f"PRETO ({len(preto)})")
+                    for x in preto:
+                        cb.write(f"- {x}")
+                    
                     st.write("")
                     st.info("⚠️ **Nota da Diretoria:** Caso a presença por cor seja desproporcional (ex: 13 Verdes vs 7 Pretos), os ADMs farão o remanejamento manual dos atletas na hora para equilibrar os times.")
 
