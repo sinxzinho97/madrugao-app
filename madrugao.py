@@ -187,15 +187,45 @@ else:
 
 df_elenco = carregar_elenco()
 
-# --- NAVEGAÇÃO ---
+# --- CARREGAMENTO GLOBAL DE DADOS FINANCEIROS ---
+# 1. Checks
+cols_status = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+df_checks = load_data("financeiro", cols_status)
+if not df_elenco.empty:
+    df_mens = df_elenco[df_elenco['tipo'] == 'Mensalista'][['nome']].sort_values('nome')
+    if not df_checks.empty:
+        for nm in df_mens['nome']:
+            if nm not in df_checks['nome'].values:
+                nv = {k: False for k in cols_status if k!='nome'}; nv['nome'] = nm
+                df_checks = pd.concat([df_checks, pd.DataFrame([nv])], ignore_index=True)
+        df_checks = df_checks[df_checks['nome'].isin(df_mens['nome'])]
+    else:
+        df_checks = df_mens.copy(); 
+        for c in cols_status[1:]: df_checks[c] = False
+for c in cols_status[1:]: df_checks[c] = df_checks[c].astype(str).str.upper() == 'TRUE'
+
+# 2. Movimentações (Cofre)
+cols_mov = ["Data", "Descricao", "Valor"]
+df_mov = load_data("saidas", cols_mov)
+if not df_mov.empty: df_mov["Valor"] = pd.to_numeric(df_mov["Valor"], errors='coerce').fillna(0)
+
+# Cálculos do Cofre
+total_entradas = df_mov[df_mov["Valor"] > 0]["Valor"].sum()
+total_saidas = abs(df_mov[df_mov["Valor"] < 0]["Valor"].sum())
+saldo_caixa = total_entradas - total_saidas
+
+# --- NAVEGAÇÃO (ABAS) ---
 if user_role == "admin":
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🎲 Sorteio", "📝 Súmula", "👥 Elenco", "💰 Financeiro", "📊 Estatísticas", "⚙️ Ajustes"])
+    # 7 Abas
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["🎲 Sorteio", "📝 Súmula", "👥 Elenco", "💰 Financeiro", "🏦 Cofre", "📊 Estatísticas", "⚙️ Ajustes"])
 elif user_role == "finance":
-    tab4, tab5 = st.tabs(["💰 Financeiro", "📊 Estatísticas"])
-    tab1=tab2=tab3=tab6=st.container()
+    # 3 Abas
+    tab4, tab5, tab6 = st.tabs(["💰 Financeiro", "🏦 Cofre", "📊 Estatísticas"])
+    tab1=tab2=tab3=tab7=st.container()
 else:
-    tab5, tab4 = st.tabs(["📊 Estatísticas", "💰 Financeiro"])
-    tab1=tab2=tab3=tab6=st.container()
+    # 3 Abas (Visualização)
+    tab6, tab4, tab5 = st.tabs(["📊 Estatísticas", "💰 Financeiro", "🏦 Cofre"])
+    tab1=tab2=tab3=tab7=st.container()
 
 # === ABA 1: SORTEIO ===
 if user_role == "admin":
@@ -334,101 +364,85 @@ if user_role == "admin":
                     if c_bt2.button("Excluir"):
                         save_data(df_elenco[df_elenco['nome']!=s], "elenco"); st.rerun()
 
-# === ABA 4: FINANCEIRO ===
+# === ABA 4: FINANCEIRO (LISTA DE CHECKS) ===
 with tab4:
-    st.header("💰 Financeiro")
+    st.header("💰 Controle de Pagamentos")
     
-    # 1. Carrega CHECKS (Status de Pagamento - Visual)
-    cols_status = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-    df_checks = load_data("financeiro", cols_status)
-    if not df_elenco.empty:
-        df_mens = df_elenco[df_elenco['tipo'] == 'Mensalista'][['nome']].sort_values('nome')
-        if not df_checks.empty:
-            for nm in df_mens['nome']:
-                if nm not in df_checks['nome'].values:
-                    nv = {k: False for k in cols_status if k!='nome'}; nv['nome'] = nm
-                    df_checks = pd.concat([df_checks, pd.DataFrame([nv])], ignore_index=True)
-            df_checks = df_checks[df_checks['nome'].isin(df_mens['nome'])]
-        else:
-            df_checks = df_mens.copy(); 
-            for c in cols_status[1:]: df_checks[c] = False
+    # Inadimplência Visual
+    hoje = datetime.today()
+    meses_map = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
+    mes_atual = meses_map[hoje.month]
+    pagos_count = df_checks[df_checks[mes_atual] == True].shape[0]
+    total_atletas = df_checks.shape[0]
+    inadimplentes = total_atletas - pagos_count
     
-    for c in cols_status[1:]: df_checks[c] = df_checks[c].astype(str).str.upper() == 'TRUE'
-
-    # 2. Carrega MOVIMENTAÇÕES (Caixa Real)
-    # Reutilizando a planilha "saidas", mas agora vamos gravar valores positivos e negativos
-    cols_mov = ["Data", "Descricao", "Valor"]
-    df_mov = load_data("saidas", cols_mov)
-    if not df_mov.empty: df_mov["Valor"] = pd.to_numeric(df_mov["Valor"], errors='coerce').fillna(0)
-
-    # CÁLCULOS
-    total_entradas = df_mov[df_mov["Valor"] > 0]["Valor"].sum()
-    total_saidas = abs(df_mov[df_mov["Valor"] < 0]["Valor"].sum())
-    saldo_caixa = total_entradas - total_saidas
-
-    # --- ÁREA RESTRITA ---
-    if user_role in ["admin", "finance"]:
-        # DASHBOARD
-        st.subheader("Fluxo de Caixa")
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Total Arrecadado (Entradas)", f"R$ {total_entradas:,.2f}")
-        k2.metric("Total Despesas (Saídas)", f"R$ {total_saidas:,.2f}")
-        k3.metric("SALDO EM CAIXA 🏦", f"R$ {saldo_caixa:,.2f}", delta="Disponível")
-        
-        st.divider()
-
-        # ABAS INTERNAS
-        sub_tab1, sub_tab2 = st.tabs(["📝 Controle Visual (Checks)", "💸 Livro Caixa (Entradas/Saídas)"])
-        
-        with sub_tab1:
-            st.write("**Controle de Cobrança:** Marque quem está em dia (apenas para organização visual).")
-            edited_checks = st.data_editor(df_checks, use_container_width=True, hide_index=True)
-            if st.button("SALVAR CHECKS"):
-                save_data(edited_checks, "financeiro"); st.success("Lista atualizada!"); st.rerun()
-                
-        with sub_tab2:
-            st.write("**Registre aqui tudo o que entra (Mensalidades) e sai (Despesas).**")
-            c_g1, c_g2, c_g3, c_g4 = st.columns([1, 2, 1, 1])
-            d_data = c_g1.date_input("Data", datetime.today())
-            d_desc = c_g2.text_input("Descrição (Ex: Mensalidades 10/01)")
-            d_valor = c_g3.number_input("Valor (R$)", min_value=0.0, step=10.0)
-            d_tipo = c_g4.radio("Tipo:", ["Entrada ( + )", "Saída ( - )"], horizontal=True)
-            
-            if st.button("💾 REGISTRAR MOVIMENTAÇÃO"):
-                if d_desc and d_valor > 0:
-                    valor_final = d_valor if "Entrada" in d_tipo else -d_valor
-                    nova_mov = pd.DataFrame([{"Data": str(d_data), "Descricao": d_desc, "Valor": valor_final}])
-                    df_mov = pd.concat([df_mov, nova_mov], ignore_index=True)
-                    save_data(df_mov, "saidas"); st.success("Registrado!"); st.rerun()
-            
-            if not df_mov.empty:
-                st.divider()
-                st.write("Extrato:")
-                # Mostra bonitinho com cores
-                df_show = df_mov.sort_values("Data", ascending=False).copy()
-                
-                # Função para colorir a tabela
-                def color_negative_red(val):
-                    color = 'red' if val < 0 else 'green'
-                    return f'color: {color}'
-                
-                st.dataframe(df_show.style.map(color_negative_red, subset=['Valor']).format({"Valor": "R$ {:.2f}"}), use_container_width=True, hide_index=True)
-                
-                if user_role == "admin":
-                    with st.expander("🗑️ Corrigir/Apagar Lançamento"):
-                        idx_del = st.selectbox("Selecione para apagar:", df_mov['Descricao'].unique())
-                        if st.button("Apagar Selecionado"):
-                             df_mov = df_mov[df_mov['Descricao'] != idx_del]
-                             save_data(df_mov, "saidas"); st.rerun()
-
+    # Mini Dashboard
+    c_f1, c_f2 = st.columns(2)
+    c_f1.info(f"Mês Atual ({mes_atual}): {pagos_count} pagos de {total_atletas}")
+    if hoje.day > 20 and inadimplentes > 0:
+        c_f2.error(f"🚨 {inadimplentes} pendentes (Atrasados)")
     else:
-        # --- VISITANTE ---
-        st.info("ℹ️ Abaixo, a lista de mensalistas ativos. Detalhes financeiros restritos.")
-        st.caption("Mensalistas Ativos:")
+        c_f2.warning(f"🕒 {inadimplentes} pendentes")
+
+    st.divider()
+
+    if user_role in ["admin", "finance"]:
+        st.write("Marque quem está em dia (Controle Visual):")
+        edited_checks = st.data_editor(df_checks, use_container_width=True, hide_index=True)
+        if st.button("SALVAR LISTA"):
+            save_data(edited_checks, "financeiro"); st.success("Atualizado!"); st.rerun()
+    else:
+        # Visitante
+        st.write("Lista de Mensalistas Ativos:")
         st.dataframe(df_checks[['nome']].rename(columns={"nome": "Atleta"}), use_container_width=True, hide_index=True)
 
-# === ABA 5: ESTATÍSTICAS ===
+# === ABA 5: COFRE (LIVRO CAIXA REAL) ===
 with tab5:
+    st.header("🏦 Cofre do Madrugão")
+    
+    # Dashboard para todos (Transparência)
+    k1, k2, k3 = st.columns(3)
+    k1.metric("Total Arrecadado (+)", f"R$ {total_entradas:,.2f}")
+    k2.metric("Total Despesas (-)", f"R$ {total_saidas:,.2f}")
+    k3.metric("SALDO ATUAL 🏦", f"R$ {saldo_caixa:,.2f}", delta="Em Caixa")
+    
+    st.divider()
+
+    # Área de Lançamento (Só Admin/Finance)
+    if user_role in ["admin", "finance"]:
+        st.write("**Registrar Movimentação (Livro Caixa):**")
+        c_g1, c_g2, c_g3, c_g4 = st.columns([1, 2, 1, 1])
+        d_data = c_g1.date_input("Data", datetime.today())
+        d_desc = c_g2.text_input("Descrição (Ex: Mensalidades 10/01)")
+        d_valor = c_g3.number_input("Valor (R$)", min_value=0.0, step=10.0)
+        d_tipo = c_g4.radio("Tipo:", ["Entrada ( + )", "Saída ( - )"], horizontal=True)
+        
+        if st.button("💾 SALVAR NO COFRE"):
+            if d_desc and d_valor > 0:
+                valor_final = d_valor if "Entrada" in d_tipo else -d_valor
+                nova_mov = pd.DataFrame([{"Data": str(d_data), "Descricao": d_desc, "Valor": valor_final}])
+                df_mov = pd.concat([df_mov, nova_mov], ignore_index=True)
+                save_data(df_mov, "saidas"); st.success("Registrado!"); st.rerun()
+        
+        if not df_mov.empty:
+            st.divider(); st.subheader("Extrato Detalhado")
+            df_show = df_mov.sort_values("Data", ascending=False).copy()
+            def color_negative_red(val):
+                color = 'red' if val < 0 else 'green'
+                return f'color: {color}'
+            st.dataframe(df_show.style.map(color_negative_red, subset=['Valor']).format({"Valor": "R$ {:.2f}"}), use_container_width=True, hide_index=True)
+            
+            if user_role == "admin":
+                with st.expander("🗑️ Área de Correção"):
+                    idx_del = st.selectbox("Apagar item:", df_mov['Descricao'].unique())
+                    if st.button("Apagar Selecionado"):
+                            df_mov = df_mov[df_mov['Descricao'] != idx_del]
+                            save_data(df_mov, "saidas"); st.rerun()
+    else:
+        st.info("ℹ️ Os detalhes das movimentações são restritos à administração. O saldo acima é o valor real disponível.")
+
+# === ABA 6: ESTATÍSTICAS ===
+with tab6:
     st.header("📊 Estatísticas")
     hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
     if not hist.empty:
@@ -469,9 +483,9 @@ with tab5:
         else: st.info("Sem dados.")
     else: st.info("Sem dados.")
 
-# === ABA 6: AJUSTES ===
+# === ABA 7: AJUSTES ===
 if user_role == "admin":
-    with tab6:
+    with tab7:
         st.header("Ajustes")
         hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
         if not hist.empty:
