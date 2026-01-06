@@ -8,7 +8,7 @@ import random
 # --- CONFIGURAÇÕES ---
 st.set_page_config(page_title="Pelada Madrugão", page_icon="🦉", layout="wide")
 
-# --- TÍTULO ATUALIZADO ---
+# --- TÍTULO ---
 st.title("Pelada Madrugão 🦉 💚 🖤")
 
 # --- CONEXÃO COM GOOGLE SHEETS ---
@@ -279,7 +279,7 @@ with tab4:
         cols = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
         df_fin = load_data("financeiro", cols)
         
-        # Sincronia de nomes
+        # Sincronia
         if not df_fin.empty:
             for nm in df_mens['nome']:
                 if nm not in df_fin['nome'].values:
@@ -291,13 +291,13 @@ with tab4:
             df_fin = df_mens.copy()
             for c in cols[1:]: df_fin[c] = False
         
-        # Converte para Booleano (Checkboxes)
+        # Converte para Booleano
         for c in cols[1:]:
             df_fin[c] = df_fin[c].astype(str).str.upper() == 'TRUE'
 
         # SEPARAÇÃO DE VISÃO
         if is_admin:
-            # --- DASHBOARD (SÓ ADMIN) ---
+            # --- ADMIN VÊ TUDO ---
             hoje = datetime.today()
             meses_map = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
             mes_atual = meses_map[hoje.month]
@@ -320,18 +320,20 @@ with tab4:
 
             st.divider()
             st.info("Modo Admin: Marque as caixas e clique em Salvar.")
-            
-            # Tabela Editável
             edited = st.data_editor(df_fin, use_container_width=True, hide_index=True)
             if st.button("SALVAR PAGAMENTOS"):
                 if save_data(edited, "financeiro"):
                     st.success("Financeiro Atualizado!")
                     st.rerun()
         else:
-            # --- VISITANTE (SÓ VÊ TOTAL) ---
+            # --- VISITANTE VÊ LISTA DE NOMES ---
             total = df_fin.shape[0]
             st.metric("Total de Atletas Mensalistas", total)
-            st.info("ℹ️ Os detalhes de pagamentos são restritos à administração.")
+            st.info("ℹ️ Abaixo, a lista de mensalistas ativos. Detalhes de pagamento são restritos.")
+            
+            # Mostra apenas a coluna de nomes para visitantes
+            df_visitor = df_fin[['nome']].rename(columns={"nome": "Atleta"})
+            st.dataframe(df_visitor, use_container_width=True, hide_index=True)
     else:
         st.warning("Sem dados de mensalistas.")
 
