@@ -34,18 +34,37 @@ def load_data(sheet_name, expected_cols):
         data = worksheet.get_all_records()
         if not data:
             return pd.DataFrame(columns=expected_cols)
-        return pd.DataFrame(data)
-    except:
+        # Garante que as colunas sejam strings para evitar erro
+        df = pd.DataFrame(data)
+        # Força as colunas esperadas se estiverem faltando
+        for col in expected_cols:
+            if col not in df.columns:
+                df[col] = ""
+        return df
+    except Exception as e:
+        st.error(f"Erro ao ler dados: {e}")
         return pd.DataFrame(columns=expected_cols)
 
+# --- FUNÇÃO DE SALVAR BLINDADA ---
 def save_data(df, sheet_name):
-    sh = get_connection()
     try:
-        worksheet = sh.worksheet(sheet_name)
-    except:
-        worksheet = sh.add_worksheet(title=sheet_name, rows=100, cols=20)
-    worksheet.clear()
-    worksheet.update([df.columns.values.tolist()] + df.values.tolist())
+        sh = get_connection()
+        try:
+            worksheet = sh.worksheet(sheet_name)
+        except:
+            worksheet = sh.add_worksheet(title=sheet_name, rows=100, cols=20)
+        
+        worksheet.clear()
+        
+        # Prepara os dados (Cabeçalho + Linhas)
+        dados = [df.columns.values.tolist()] + df.values.tolist()
+        
+        # Tenta o método compatível com todas as versões do gspread
+        worksheet.update(range_name='A1', values=dados)
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar na planilha: {e}")
+        return False
 
 # --- LISTA PADRÃO ---
 LISTA_PADRAO = [
@@ -88,8 +107,7 @@ def carregar_elenco():
     df = load_data("elenco", ["nome", "time", "tipo"])
     if df.empty:
         df = pd.DataFrame(LISTA_PADRAO)
-        try: save_data(df, "elenco")
-        except: pass
+        save_data(df, "elenco")
     return df
 
 # --- LOGIN ---
@@ -106,25 +124,23 @@ else:
 
 df_elenco = carregar_elenco()
 
-# --- DEFINIÇÃO DAS ABAS (ADMIN VS VISITANTE) ---
+# --- ABAS ---
 if is_admin:
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🎲 Sorteio", "📝 Súmula", "👥 Elenco", "💰 Financeiro", "📊 Estatísticas", "⚙️ Ajustes"
     ])
 else:
-    # Visitante agora vê Estatísticas E Financeiro
     tab5, tab4 = st.tabs(["📊 Estatísticas", "💰 Financeiro"])
-    # As outras abas ficam vazias
     tab1 = tab2 = tab3 = tab6 = st.container()
 
-# === ABA 1: SORTEIO (SÓ ADMIN) ===
+# === ABA 1: SORTEIO ===
 if is_admin:
     with tab1:
         st.header("Montar Times")
         c1, c2 = st.columns([1, 2])
         with c1:
             if not df_elenco.empty:
-                nomes = sorted(df_elenco['nome'].tolist())
+                nomes = sorted(df_elenco['nome'].astype(str).tolist())
                 mens = st.multiselect("Presença (Ordem):", nomes, key="t1_m")
                 diar = st.text_area("Diaristas:", key="t1_d")
             else:
@@ -136,7 +152,7 @@ if is_admin:
                 l_diar = [x.strip() for x in diar.split('\n') if x.strip()]
                 elenco = mens + l_diar
                 if not elenco:
-                    st.error("Vazio!")
+                    st.error("Ninguém selecionado!")
                 else:
                     MAX = 20
                     tit = elenco[:MAX]
@@ -162,12 +178,12 @@ if is_admin:
                             idx = (MAX-1)-i
                             if idx>=0: st.write(f"{MAX+i+1}º {r} entra por {tit[idx]}")
 
-# === ABA 2: SÚMULA (SÓ ADMIN) ===
+# === ABA 2: SÚMULA ===
 if is_admin:
     with tab2:
         st.header("Súmula")
         dt = st.date_input("Data", datetime.today())
-        mens_list = sorted(df_elenco['nome'].tolist()) if not df_elenco.empty else []
+        mens_list = sorted(df_elenco['nome'].astype(str).tolist()) if not df_elenco.empty else []
         def_m = [x for x in st.session_state.get('mem_m', []) if x in mens_list]
         def_d = st.session_state.get('mem_d', "")
         
@@ -193,54 +209,73 @@ if is_admin:
                     for i, a in enumerate(qg):
                         gm[a] = cols[i%3].number_input(f"{a}", 1, 20, 1, key=f"g_{a}")
         
-        if st.button("💾 SALVAR", type="primary"):
-            try:
-                hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
-                gid = int(datetime.now().timestamp())
-                nv = []
-                for p in lf: nv.append({"id": gid, "data": str(dt), "jogador": p, "tipo_registro": "Jogo", "gols": gm.get(p,0), "vencedor": v})
-                for j in just: nv.append({"id": gid, "data": str(dt), "jogador": j, "tipo_registro": "Justificado", "gols": 0, "vencedor": ""})
-                save_data(pd.concat([hist, pd.DataFrame(nv)]), "jogos")
-                st.toast("Salvo!", icon="✅")
-            except Exception as e: st.error(str(e))
+        if st.button("💾 SALVAR SÚMULA", type="primary"):
+            hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
+            gid = int(datetime.now().timestamp())
+            nv = []
+            for p in lf: nv.append({"id": gid, "data": str(dt), "jogador": p, "tipo_registro": "Jogo", "gols": gm.get(p,0), "vencedor": v})
+            for j in just: nv.append({"id": gid, "data": str(dt), "jogador": j, "tipo_registro": "Justificado", "gols": 0, "vencedor": ""})
+            
+            if save_data(pd.concat([hist, pd.DataFrame(nv)]), "jogos"):
+                st.toast("Súmula Salva!", icon="✅")
 
-# === ABA 3: ELENCO (SÓ ADMIN) ===
+# === ABA 3: ELENCO (CORRIGIDO) ===
 if is_admin:
     with tab3:
-        st.header("Elenco")
+        st.header("Gerenciar Elenco")
         c1, c2 = st.columns(2)
+        
+        # --- ADICIONAR ---
         with c1:
-            n = st.text_input("Nome")
+            st.subheader("➕ Adicionar Novo")
+            n = st.text_input("Nome").strip() # Remove espaços extras
             t = st.selectbox("Time", ["Verde", "Preto", "Ambos"])
             tp = st.selectbox("Tipo", ["Mensalista", "Diarista Frequente"])
-            if st.button("Add"):
-                if n and n not in df_elenco['nome'].values:
-                    save_data(pd.concat([df_elenco, pd.DataFrame([{"nome":n,"time":t,"tipo":tp}])], ignore_index=True), "elenco")
-                    st.rerun()
+            
+            if st.button("Adicionar Jogador"):
+                if not n:
+                    st.warning("Digite um nome!")
+                elif n in df_elenco['nome'].values:
+                    st.error("Esse nome já existe!")
+                else:
+                    novo_df = pd.concat([df_elenco, pd.DataFrame([{"nome":n,"time":t,"tipo":tp}])], ignore_index=True)
+                    if save_data(novo_df, "elenco"):
+                        st.success(f"{n} adicionado com sucesso!")
+                        st.rerun()
+
+        # --- EDITAR ---
         with c2:
+            st.subheader("✏️ Editar / Remover")
             if not df_elenco.empty:
-                s = st.selectbox("Edit:", df_elenco['nome'].tolist())
+                nomes_lista = sorted(df_elenco['nome'].astype(str).tolist())
+                s = st.selectbox("Selecione para editar:", nomes_lista)
+                
                 if s:
+                    # Pega dados atuais
                     r = df_elenco[df_elenco['nome']==s].iloc[0]
                     try: ix = ["Verde","Preto","Ambos"].index(r['time'])
                     except: ix = 0
-                    nt = st.selectbox("Novo Time:", ["Verde","Preto","Ambos"], index=ix)
-                    ntp = st.selectbox("Novo Tipo:", ["Mensalista","Diarista Frequente"], index=0)
-                    if st.button("Salvar Edit"):
+                    
+                    nt = st.selectbox("Novo Time:", ["Verde","Preto","Ambos"], index=ix, key="edit_time")
+                    ntp = st.selectbox("Novo Tipo:", ["Mensalista","Diarista Frequente"], index=0, key="edit_tipo")
+                    
+                    cb1, cb2 = st.columns(2)
+                    if cb1.button("💾 SALVAR ALTERAÇÃO"):
                         df_elenco.loc[df_elenco['nome']==s, 'time'] = nt
                         df_elenco.loc[df_elenco['nome']==s, 'tipo'] = ntp
-                        save_data(df_elenco, "elenco")
-                        st.rerun()
-                    if st.button("Del"):
-                        save_data(df_elenco[df_elenco['nome']!=s], "elenco")
-                        st.rerun()
+                        if save_data(df_elenco, "elenco"):
+                            st.success("Alteração salva!")
+                            st.rerun()
+                            
+                    if cb2.button("🗑️ EXCLUIR"):
+                        novo_df = df_elenco[df_elenco['nome']!=s]
+                        if save_data(novo_df, "elenco"):
+                            st.warning(f"{s} removido!")
+                            st.rerun()
 
-# === ABA 4: FINANCEIRO (MISTO) ===
-# Essa aba agora carrega para todo mundo, mas exibe diferente
+# === ABA 4: FINANCEIRO ===
 with tab4:
     st.header("💰 Financeiro")
-    
-    # Lógica de Carregamento (Igual para os dois)
     if not df_elenco.empty:
         df_mens = df_elenco[df_elenco['tipo'] == 'Mensalista'][['nome']].sort_values('nome')
         cols = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
@@ -257,23 +292,19 @@ with tab4:
         else:
             df_fin = df_mens.copy()
             for c in cols[1:]: df_fin[c] = False
-    
-        # === A DIFERENÇA VEM AQUI ===
+        
         if is_admin:
-            # Admin: Pode editar e salvar
-            st.info("Modo Admin: Você pode alterar os pagamentos.")
+            st.info("Modo Admin: Edite e salve.")
             edited = st.data_editor(df_fin, use_container_width=True, hide_index=True)
-            if st.button("💾 SALVAR PAGAMENTOS"):
-                save_data(edited, "financeiro")
-                st.success("Financeiro Atualizado!")
+            if st.button("SALVAR PAGAMENTOS"):
+                if save_data(edited, "financeiro"):
+                    st.success("Financeiro Atualizado!")
         else:
-            # Visitante: Só vê a tabela travada
-            st.info("Transparência: Acompanhe quem já realizou o pagamento.")
             st.dataframe(df_fin, use_container_width=True, hide_index=True)
     else:
-        st.warning("Cadastre jogadores para ver o financeiro.")
+        st.warning("Sem dados.")
 
-# === ABA 5: ESTATÍSTICAS (PÚBLICO) ===
+# === ABA 5: ESTATÍSTICAS ===
 with tab5:
     st.header("📊 Estatísticas")
     hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
@@ -298,9 +329,9 @@ with tab5:
             f['Total'] = f['Jogos'] + f['Justif.']
             st.dataframe(f.sort_values('Jogos', ascending=False), use_container_width=True)
     else:
-        st.info("Sem dados.")
+        st.info("Sem dados ainda.")
 
-# === ABA 6: AJUSTES (SÓ ADMIN) ===
+# === ABA 6: AJUSTES ===
 if is_admin:
     with tab6:
         st.header("Ajustes")
@@ -311,5 +342,5 @@ if is_admin:
                 c1,c2 = st.columns([4,1])
                 c1.write(f"📅 {r['data']} - {r['vencedor']}")
                 if c2.button("Apagar", key=f"d_{r['id']}"):
-                    save_data(hist[hist['id']!=r['id']], "jogos")
-                    st.rerun()
+                    if save_data(hist[hist['id']!=r['id']], "jogos"):
+                        st.rerun()
