@@ -4,11 +4,11 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import random
+import matplotlib.pyplot as plt
+import io
 
 # --- CONFIGURAÇÕES ---
 st.set_page_config(page_title="Pelada Madrugão", page_icon="🦉", layout="wide")
-
-# --- TÍTULO ---
 st.title("Pelada Madrugão 🦉 💚 🖤")
 
 # --- CONEXÃO COM GOOGLE SHEETS ---
@@ -58,6 +58,36 @@ def save_data(df, sheet_name):
     except Exception as e:
         st.error(f"Erro ao salvar: {e}")
         return False
+
+# --- FUNÇÃO GERADORA DE IMAGEM (PRINT) ---
+def gerar_imagem_tabela(df, titulo="Relatório"):
+    # Cria uma figura
+    fig, ax = plt.subplots(figsize=(10, len(df) * 0.5 + 2)) # Altura dinâmica
+    ax.axis('tight')
+    ax.axis('off')
+    
+    # Título da imagem
+    plt.title(titulo, fontsize=16, weight='bold', pad=20)
+    
+    # Desenha a tabela
+    tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center')
+    
+    # Estilização
+    tabela.auto_set_font_size(False)
+    tabela.set_fontsize(10)
+    tabela.scale(1.2, 1.2) # Escala para ficar legível
+    
+    # Cores no cabeçalho
+    for key, cell in tabela.get_celld().items():
+        if key[0] == 0: # Cabeçalho
+            cell.set_facecolor('#d1e7dd') # Verde claro
+            cell.set_text_props(weight='bold')
+    
+    # Salva na memória (buffer)
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+    buf.seek(0)
+    return buf
 
 # --- LISTA PADRÃO ---
 LISTA_PADRAO = [
@@ -279,7 +309,7 @@ with tab4:
         cols = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
         df_fin = load_data("financeiro", cols)
         
-        # Sincronia
+        # Sincronia de nomes
         if not df_fin.empty:
             for nm in df_mens['nome']:
                 if nm not in df_fin['nome'].values:
@@ -297,7 +327,7 @@ with tab4:
 
         # SEPARAÇÃO DE VISÃO
         if is_admin:
-            # --- ADMIN VÊ TUDO ---
+            # --- DASHBOARD (SÓ ADMIN) ---
             hoje = datetime.today()
             meses_map = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
             mes_atual = meses_map[hoje.month]
@@ -319,7 +349,30 @@ with tab4:
                 k4.metric("Inadimplentes", "0", delta="No prazo")
 
             st.divider()
+            
+            # --- ÁREA DE DOWNLOAD (PRINT) - SÓ ADMIN ---
             st.info("Modo Admin: Marque as caixas e clique em Salvar.")
+            col_print, col_table = st.columns([1, 4])
+            
+            with col_print:
+                # Prepara os dados para o Print (Substitui True/False por Sim/Não ou Emoji)
+                df_print = df_fin.copy()
+                # Mostra apenas o nome e o mês atual no print, pra não ficar gigante
+                cols_print = ["nome", mes_atual]
+                df_print = df_print[cols_print]
+                df_print[mes_atual] = df_print[mes_atual].apply(lambda x: "✅" if x else "❌")
+                df_print.columns = ["Atleta", f"Pago ({mes_atual})"]
+                
+                # Gera o botão
+                img_buffer = gerar_imagem_tabela(df_print, titulo=f"Financeiro - {mes_atual}")
+                st.download_button(
+                    label="📸 Baixar Print",
+                    data=img_buffer,
+                    file_name=f"financeiro_{mes_atual}.png",
+                    mime="image/png"
+                )
+
+            # Tabela Editável
             edited = st.data_editor(df_fin, use_container_width=True, hide_index=True)
             if st.button("SALVAR PAGAMENTOS"):
                 if save_data(edited, "financeiro"):
@@ -331,7 +384,6 @@ with tab4:
             st.metric("Total de Atletas Mensalistas", total)
             st.info("ℹ️ Abaixo, a lista de mensalistas ativos. Detalhes de pagamento são restritos.")
             
-            # Mostra apenas a coluna de nomes para visitantes
             df_visitor = df_fin[['nome']].rename(columns={"nome": "Atleta"})
             st.dataframe(df_visitor, use_container_width=True, hide_index=True)
     else:
@@ -359,6 +411,17 @@ with tab5:
                 g['jogador'] = g.apply(lambda x: f"🥇 {x['jogador']}" if x['gols'] == max_gols else x['jogador'], axis=1)
 
             st.dataframe(g, use_container_width=True, hide_index=True)
+            
+            # --- BOTÃO DE DOWNLOAD (PÚBLICO) ---
+            st.write("")
+            img_buffer_art = gerar_imagem_tabela(g, titulo="Artilharia Madrugão")
+            st.download_button(
+                label="📸 Baixar Artilharia",
+                data=img_buffer_art,
+                file_name="artilharia.png",
+                mime="image/png"
+            )
+
         with cb:
             st.subheader("Presença")
             j = hist[hist['tipo_registro']=='Jogo'].groupby("jogador").size().rename("Jogos")
