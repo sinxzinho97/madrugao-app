@@ -34,9 +34,7 @@ def load_data(sheet_name, expected_cols):
         data = worksheet.get_all_records()
         if not data:
             return pd.DataFrame(columns=expected_cols)
-        # Garante que as colunas sejam strings para evitar erro
         df = pd.DataFrame(data)
-        # Força as colunas esperadas se estiverem faltando
         for col in expected_cols:
             if col not in df.columns:
                 df[col] = ""
@@ -45,7 +43,6 @@ def load_data(sheet_name, expected_cols):
         st.error(f"Erro ao ler dados: {e}")
         return pd.DataFrame(columns=expected_cols)
 
-# --- FUNÇÃO DE SALVAR BLINDADA ---
 def save_data(df, sheet_name):
     try:
         sh = get_connection()
@@ -55,15 +52,11 @@ def save_data(df, sheet_name):
             worksheet = sh.add_worksheet(title=sheet_name, rows=100, cols=20)
         
         worksheet.clear()
-        
-        # Prepara os dados (Cabeçalho + Linhas)
         dados = [df.columns.values.tolist()] + df.values.tolist()
-        
-        # Tenta o método compatível com todas as versões do gspread
         worksheet.update(range_name='A1', values=dados)
         return True
     except Exception as e:
-        st.error(f"Erro ao salvar na planilha: {e}")
+        st.error(f"Erro ao salvar: {e}")
         return False
 
 # --- LISTA PADRÃO ---
@@ -124,7 +117,6 @@ else:
 
 df_elenco = carregar_elenco()
 
-# --- ABAS ---
 if is_admin:
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🎲 Sorteio", "📝 Súmula", "👥 Elenco", "💰 Financeiro", "📊 Estatísticas", "⚙️ Ajustes"
@@ -219,16 +211,15 @@ if is_admin:
             if save_data(pd.concat([hist, pd.DataFrame(nv)]), "jogos"):
                 st.toast("Súmula Salva!", icon="✅")
 
-# === ABA 3: ELENCO (CORRIGIDO) ===
+# === ABA 3: ELENCO (COM O VISUAL 'C') ===
 if is_admin:
     with tab3:
         st.header("Gerenciar Elenco")
         c1, c2 = st.columns(2)
         
-        # --- ADICIONAR ---
         with c1:
             st.subheader("➕ Adicionar Novo")
-            n = st.text_input("Nome").strip() # Remove espaços extras
+            n = st.text_input("Nome").strip()
             t = st.selectbox("Time", ["Verde", "Preto", "Ambos"])
             tp = st.selectbox("Tipo", ["Mensalista", "Diarista Frequente"])
             
@@ -240,24 +231,43 @@ if is_admin:
                 else:
                     novo_df = pd.concat([df_elenco, pd.DataFrame([{"nome":n,"time":t,"tipo":tp}])], ignore_index=True)
                     if save_data(novo_df, "elenco"):
-                        st.success(f"{n} adicionado com sucesso!")
+                        st.success(f"{n} adicionado!")
                         st.rerun()
 
-        # --- EDITAR ---
         with c2:
             st.subheader("✏️ Editar / Remover")
             if not df_elenco.empty:
+                # --- AQUI ESTÁ A MÁGICA VISUAL DO (C) ---
+                def formatar_nome_display(nome_original):
+                    # Procura o jogador na tabela
+                    row = df_elenco[df_elenco['nome'] == nome_original]
+                    if not row.empty:
+                        # Se o time for 'Ambos', adiciona o (C) visualmente
+                        if row.iloc[0]['time'] == 'Ambos':
+                            return f"{nome_original} (C)"
+                    return nome_original
+
                 nomes_lista = sorted(df_elenco['nome'].astype(str).tolist())
-                s = st.selectbox("Selecione para editar:", nomes_lista)
+                
+                # O 'format_func' muda apenas o que a gente VÊ, não o valor real 's'
+                s = st.selectbox(
+                    "Selecione para editar:", 
+                    nomes_lista, 
+                    format_func=formatar_nome_display
+                )
                 
                 if s:
-                    # Pega dados atuais
+                    # Mostra os dados atuais
                     r = df_elenco[df_elenco['nome']==s].iloc[0]
+                    
+                    # Define índices padrão
                     try: ix = ["Verde","Preto","Ambos"].index(r['time'])
                     except: ix = 0
+                    try: ixp = ["Mensalista","Diarista Frequente"].index(r['tipo'])
+                    except: ixp = 0
                     
                     nt = st.selectbox("Novo Time:", ["Verde","Preto","Ambos"], index=ix, key="edit_time")
-                    ntp = st.selectbox("Novo Tipo:", ["Mensalista","Diarista Frequente"], index=0, key="edit_tipo")
+                    ntp = st.selectbox("Novo Tipo:", ["Mensalista","Diarista Frequente"], index=ixp, key="edit_tipo")
                     
                     cb1, cb2 = st.columns(2)
                     if cb1.button("💾 SALVAR ALTERAÇÃO"):
@@ -281,7 +291,6 @@ with tab4:
         cols = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
         df_fin = load_data("financeiro", cols)
         
-        # Sincronia
         if not df_fin.empty:
             for nm in df_mens['nome']:
                 if nm not in df_fin['nome'].values:
