@@ -22,7 +22,7 @@ def get_connection():
     )
     client = gspread.authorize(creds)
     # Abre a planilha pelo nome
-    return client.open("madrugao_db")
+    return client.open("1OSxEwiE3voMOd-EI6CJ034torY-K7oFoz8EReyXkmPA")
 
 # Função para ler dados de uma aba específica
 def load_data(sheet_name, expected_cols):
