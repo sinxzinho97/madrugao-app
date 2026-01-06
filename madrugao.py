@@ -441,6 +441,40 @@ with tab5:
                 save_data(edited_df, "saidas")
                 st.success("Cofre atualizado com sucesso!")
                 st.rerun()
+                
+            # NOVA ÁREA: Botão de exclusão seletiva (Mais fácil para celular)
+            with st.expander("🗑️ Apagar Movimentação (Modo Lista)"):
+                # Cria uma lista legível para o dropdown
+                # Usamos o índice original como chave para garantir exclusão correta
+                df_temp = df_mov.copy()
+                df_temp = df_temp.sort_values("Data", ascending=False)
+                
+                # Criamos opções com ID oculto no índice do dataframe original se possível, 
+                # mas aqui vamos usar uma string combinada.
+                # A melhor forma segura é usar o índice resetado e mapear.
+                opcoes_exclusao = []
+                for idx, row in df_temp.iterrows():
+                    opcoes_exclusao.append(f"[{idx}] {row['Data'].strftime('%d/%m/%Y')} | {row['Descricao']} | R$ {row['Valor']:.2f}")
+                
+                if opcoes_exclusao:
+                    selecionado = st.selectbox("Selecione o item para excluir:", options=opcoes_exclusao)
+                    
+                    if st.button("🗑️ EXCLUIR ITEM SELECIONADO"):
+                        # Extrai o índice original que está entre colchetes [123]
+                        idx_to_drop = int(selecionado.split("]")[0].replace("[", ""))
+                        
+                        # Remove do dataframe original (df_mov)
+                        df_novo = df_mov.drop(idx_to_drop)
+                        
+                        # Prepara para salvar (converte data para string)
+                        df_novo['Data'] = df_novo['Data'].astype(str)
+                        
+                        save_data(df_novo, "saidas")
+                        st.success("Item apagado com sucesso!")
+                        st.rerun()
+                else:
+                    st.write("Nenhum item para excluir.")
+
     else:
         st.info("ℹ️ Os detalhes das movimentações são restritos à administração. O saldo acima é o valor real disponível.")
 
