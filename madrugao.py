@@ -10,15 +10,6 @@ st.set_page_config(page_title="Pelada Madrugão", page_icon="⚽", layout="wide"
 
 st.title("⚽ Gestão Madrugão")
 
-# --- DEBUG DE SEGURANÇA (O Dedo-Duro) ---
-# Isso vai mostrar na tela qual e-mail o robô está usando.
-try:
-    email_robo = st.secrets["gcp_service_account"]["client_email"]
-    st.info(f"💡 DICA DE ACESSO: O e-mail do robô é: {email_robo}")
-    st.warning("👉 Se der erro, copie esse e-mail acima, vá na sua Planilha Google > Compartilhar > e cole ele lá como EDITOR.")
-except:
-    st.error("Erro nos Segredos: Não consegui ler o e-mail do robô.")
-
 # --- CONEXÃO COM GOOGLE SHEETS ---
 def get_connection():
     scopes = [
@@ -31,8 +22,7 @@ def get_connection():
     )
     client = gspread.authorize(creds)
     
-    # --- AQUI ESTAVA O ERRO, AGORA ESTÁ CORRIGIDO ---
-    # Usando open_by_key com o ID que você mandou
+    # ID DA SUA PLANILHA (Já configurado)
     return client.open_by_key("1OSxEwiE3voMOd-EI6CJ034torY-K7oFoz8EReyXkmPA")
 
 # Função para ler dados
@@ -103,11 +93,10 @@ def carregar_elenco():
     df = load_data("elenco", ["nome", "time", "tipo"])
     if df.empty:
         df = pd.DataFrame(LISTA_PADRAO)
-        # Tenta salvar a lista inicial apenas se a conexão funcionar
         try:
             save_data(df, "elenco")
         except:
-            pass # Se der erro aqui, é permissão, o usuário vai ver o aviso lá em cima
+            pass
     return df
 
 # --- LOGIN ---
@@ -122,10 +111,8 @@ if is_admin:
 else:
     st.sidebar.info("Modo Visitante")
 
-# Carrega elenco (pode demorar um pouco na primeira vez)
 df_elenco = carregar_elenco()
 
-# Abas
 if is_admin:
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🎲 Sorteio", "📝 Súmula", "👥 Elenco", "💰 Financeiro", "📊 Estatísticas", "⚙️ Ajustes"
@@ -259,7 +246,6 @@ if is_admin:
                 sel = st.selectbox("Editar:", df_elenco['nome'].tolist())
                 if sel:
                     row = df_elenco[df_elenco['nome'] == sel].iloc[0]
-                    # Indice seguro
                     try:
                         idx_time = ["Verde", "Preto", "Ambos"].index(row['time'])
                     except:
