@@ -16,7 +16,8 @@ with st.sidebar:
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
     else:
-        st.warning("⚠️ Para ver a logo, suba o arquivo 'logo.png' no GitHub.")
+        # Espaço vazio se não tiver logo, sem warning pra ficar limpo
+        st.write("")
     st.title("🔒 Área Restrita")
 
 # --- TÍTULO PRINCIPAL ---
@@ -70,7 +71,7 @@ def save_data(df, sheet_name):
         st.error(f"Erro ao salvar: {e}")
         return False
 
-# --- FUNÇÃO GERADORA DE IMAGEM (PRINT HD) ---
+# --- FUNÇÃO 1: RELATÓRIOS (TABELAS) ---
 def gerar_imagem_bonita(df, titulo="Relatório"):
     cor_cabecalho = '#1b5e20' 
     cor_texto_cabecalho = 'white'
@@ -92,7 +93,6 @@ def gerar_imagem_bonita(df, titulo="Relatório"):
     for (row, col), cell in tabela.get_celld().items():
         cell.set_edgecolor('#cfd8dc')
         cell.set_linewidth(1)
-        
         if row == 0:
             cell.set_facecolor(cor_cabecalho)
             cell.set_text_props(color=cor_texto_cabecalho, weight='bold')
@@ -106,6 +106,76 @@ def gerar_imagem_bonita(df, titulo="Relatório"):
     
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=300, transparent=False)
+    buf.seek(0)
+    return buf
+
+# --- FUNÇÃO 2: CARD DO JOGO (PLACAR) ---
+def gerar_card_jogo(data_jogo, placar_verde, placar_preto, gols_map, df_elenco):
+    # Separa artilheiros por time
+    art_verde = []
+    art_preto = []
+    
+    for jogador, gols in gols_map.items():
+        if gols > 0:
+            # Tenta descobrir o time do jogador na lista oficial
+            time_jogador = "Indefinido"
+            if not df_elenco.empty:
+                row = df_elenco[df_elenco['nome'] == jogador]
+                if not row.empty:
+                    time_jogador = row.iloc[0]['time']
+            
+            # Formata texto: "Nome (xN)"
+            txt = f"{jogador}" if gols == 1 else f"{jogador} ({gols})"
+            
+            # Lógica simples: Se for Verde vai pra esquerda, se for Preto ou Ambos vai pra direita (simplificação)
+            # Idealmente o sorteio define, mas aqui vamos usar o cadastro
+            if time_jogador == 'Verde':
+                art_verde.append(txt)
+            else:
+                # Preto e Ambos (jogando no preto) assumimos aqui para visualização rápida
+                # Se quiser precisão absoluta precisaria salvar em qual time ele jogou no dia
+                art_preto.append(txt)
+
+    # Cria a Imagem
+    fig, ax = plt.subplots(figsize=(10, 8))
+    ax.axis('off')
+    
+    # Fundo
+    fig.patch.set_facecolor('#f8f9fa')
+    
+    # Título e Data
+    plt.text(0.5, 0.95, "RESULTADO FINAL", ha='center', va='center', fontsize=22, weight='bold', color='#333')
+    plt.text(0.5, 0.88, f"{data_jogo}", ha='center', va='center', fontsize=12, color='#666')
+    
+    # PLACAR GIGANTE
+    plt.text(0.25, 0.75, "VERDE", ha='center', fontsize=18, weight='bold', color='#2E7D32')
+    plt.text(0.75, 0.75, "PRETO", ha='center', fontsize=18, weight='bold', color='#212121')
+    
+    plt.text(0.5, 0.65, f"{placar_verde}  x  {placar_preto}", ha='center', va='center', fontsize=50, weight='bold')
+    
+    # Linha divisória
+    plt.plot([0.1, 0.9], [0.55, 0.55], color='#ddd', lw=2)
+    
+    # Lista de Gols
+    plt.text(0.5, 0.50, "GOLS", ha='center', fontsize=14, color='#888')
+    
+    # Coluna Verde
+    y_pos = 0.45
+    for art in art_verde:
+        plt.text(0.25, y_pos, art, ha='center', fontsize=12, color='#2E7D32')
+        y_pos -= 0.05
+        
+    # Coluna Preto
+    y_pos = 0.45
+    for art in art_preto:
+        plt.text(0.75, y_pos, art, ha='center', fontsize=12, color='#212121')
+        y_pos -= 0.05
+        
+    # Rodapé
+    plt.text(0.5, 0.05, "PELADA MADRUGAO", ha='center', fontsize=10, color='#aaa', style='italic')
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', dpi=150, facecolor='#f8f9fa')
     buf.seek(0)
     return buf
 
@@ -155,7 +225,6 @@ def carregar_elenco():
 
 # --- LOGIN ---
 SENHA_ADMIN = st.secrets.get("admin_password", "1234")
-
 senha_digitada = st.sidebar.text_input("Senha de Admin", type="password")
 is_admin = senha_digitada == SENHA_ADMIN
 
@@ -219,7 +288,7 @@ if is_admin:
                             idx = (MAX-1)-i
                             if idx>=0: st.write(f"{MAX+i+1}º {r} entra por {tit[idx]}")
 
-# === ABA 2: SÚMULA ===
+# === ABA 2: SÚMULA (COM CARD DE JOGO) ===
 if is_admin:
     with tab2:
         st.header("Súmula")
@@ -243,14 +312,32 @@ if is_admin:
         with r2:
             lf = jog + ld
             gm = {}
+            score_verde = 0
+            score_preto = 0
+            
             if lf:
                 qg = st.multiselect("Gols:", lf)
                 if qg:
                     cols = st.columns(3)
                     for i, a in enumerate(qg):
-                        gm[a] = cols[i%3].number_input(f"{a}", 1, 20, 1, key=f"g_{a}")
-        
-        if st.button("💾 SALVAR SÚMULA", type="primary"):
+                        # Pega o time do jogador pra somar no placar
+                        t_jog = "Verde" # Default
+                        if not df_elenco.empty:
+                            row = df_elenco[df_elenco['nome'] == a]
+                            if not row.empty: t_jog = row.iloc[0]['time']
+                        
+                        gols = cols[i%3].number_input(f"{a}", 1, 20, 1, key=f"g_{a}")
+                        gm[a] = gols
+                        
+                        # Soma placar estimado (baseado no cadastro)
+                        if t_jog == "Verde": score_verde += gols
+                        elif t_jog == "Preto": score_preto += gols
+                        else: 
+                            # Se for "Ambos", a gente não sabe onde jogou, soma 0 ou avisa
+                            pass 
+
+        c_save, c_print = st.columns([1, 1])
+        if c_save.button("💾 SALVAR SÚMULA", type="primary"):
             hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
             gid = int(datetime.now().timestamp())
             nv = []
@@ -259,6 +346,18 @@ if is_admin:
             
             if save_data(pd.concat([hist, pd.DataFrame(nv)]), "jogos"):
                 st.toast("Súmula Salva!", icon="✅")
+                st.session_state['ultimo_placar'] = (score_verde, score_preto, gm)
+
+        # Botão de Gerar Card (aparece se tiver algo salvo ou gols lançados)
+        if gm:
+            with c_print:
+                # Usa placar manual ou calculado
+                placar_v_man = st.number_input("Placar Verde", value=score_verde, min_value=0)
+                placar_p_man = st.number_input("Placar Preto", value=score_preto, min_value=0)
+                
+                img_card = gerar_card_jogo(str(dt), placar_v_man, placar_p_man, gm, df_elenco)
+                st.download_button("📸 Baixar Card do Jogo", img_card, f"jogo_{dt}.png", "image/png")
+
 
 # === ABA 3: ELENCO ===
 if is_admin:
@@ -271,20 +370,15 @@ if is_admin:
             n = st.text_input("Nome").strip()
             t = st.selectbox("Time", ["Verde", "Preto", "Ambos"])
             tp = st.selectbox("Tipo", ["Mensalista", "Diarista Frequente"])
-            
             if st.button("Adicionar Jogador"):
-                if not n:
-                    st.warning("Digite um nome!")
-                elif n in df_elenco['nome'].values:
-                    st.error("Esse nome já existe!")
+                if not n: st.warning("Digite um nome!")
+                elif n in df_elenco['nome'].values: st.error("Já existe!")
                 else:
                     novo_df = pd.concat([df_elenco, pd.DataFrame([{"nome":n,"time":t,"tipo":tp}])], ignore_index=True)
-                    if save_data(novo_df, "elenco"):
-                        st.success(f"{n} adicionado!")
-                        st.rerun()
+                    if save_data(novo_df, "elenco"): st.success("Adicionado!"); st.rerun()
 
         with c2:
-            st.subheader("✏️ Editar / Remover")
+            st.subheader("✏️ Editar")
             if not df_elenco.empty:
                 def formatar_nome_display(nome_original):
                     row = df_elenco[df_elenco['nome'] == nome_original]
@@ -295,9 +389,7 @@ if is_admin:
                         elif time == 'Ambos': return f"{nome_original} (C)"
                     return nome_original
 
-                nomes_lista = sorted(df_elenco['nome'].astype(str).tolist())
-                s = st.selectbox("Selecione:", nomes_lista, format_func=formatar_nome_display)
-                
+                s = st.selectbox("Selecione:", sorted(df_elenco['nome'].astype(str).tolist()), format_func=formatar_nome_display)
                 if s:
                     r = df_elenco[df_elenco['nome']==s].iloc[0]
                     try: ix = ["Verde","Preto","Ambos"].index(r['time'])
@@ -308,17 +400,12 @@ if is_admin:
                     ntp = st.selectbox("Novo Tipo:", ["Mensalista","Diarista Frequente"], index=ixp, key="edit_tipo")
                     
                     cb1, cb2 = st.columns(2)
-                    if cb1.button("💾 SALVAR ALTERAÇÃO"):
+                    if cb1.button("💾 SALVAR"):
                         df_elenco.loc[df_elenco['nome']==s, 'time'] = nt
                         df_elenco.loc[df_elenco['nome']==s, 'tipo'] = ntp
-                        if save_data(df_elenco, "elenco"):
-                            st.success("Alteração salva!")
-                            st.rerun()
+                        save_data(df_elenco, "elenco"); st.rerun()
                     if cb2.button("🗑️ EXCLUIR"):
-                        novo_df = df_elenco[df_elenco['nome']!=s]
-                        if save_data(novo_df, "elenco"):
-                            st.warning(f"{s} removido!")
-                            st.rerun()
+                        save_data(df_elenco[df_elenco['nome']!=s], "elenco"); st.rerun()
 
 # === ABA 4: FINANCEIRO ===
 with tab4:
@@ -328,7 +415,6 @@ with tab4:
         cols = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
         df_fin = load_data("financeiro", cols)
         
-        # Sincronia
         if not df_fin.empty:
             for nm in df_mens['nome']:
                 if nm not in df_fin['nome'].values:
@@ -340,59 +426,42 @@ with tab4:
             df_fin = df_mens.copy()
             for c in cols[1:]: df_fin[c] = False
         
-        # Converte para Booleano
-        for c in cols[1:]:
-            df_fin[c] = df_fin[c].astype(str).str.upper() == 'TRUE'
+        for c in cols[1:]: df_fin[c] = df_fin[c].astype(str).str.upper() == 'TRUE'
 
-        # SEPARAÇÃO DE VISÃO
         if is_admin:
-            # --- DASHBOARD (SÓ ADMIN) ---
             hoje = datetime.today()
             meses_map = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
             mes_atual = meses_map[hoje.month]
-            dia_hoje = hoje.day
-
             pagos = df_fin[df_fin[mes_atual] == True].shape[0]
             total = df_fin.shape[0]
             faltam = total - pagos
-            inadimplentes = faltam if dia_hoje > 20 else 0
+            inadimplentes = faltam if hoje.day > 20 else 0
 
             k1, k2, k3, k4 = st.columns(4)
-            k1.metric("Total Atletas", total)
+            k1.metric("Total", total)
             k2.metric(f"Pagos ({mes_atual})", pagos)
-            k3.metric("Faltam Pagar", faltam)
-            
-            if inadimplentes > 0:
-                k4.metric("🚨 Inadimplentes", inadimplentes, delta="-Atrasados", delta_color="inverse")
-            else:
-                k4.metric("Inadimplentes", "0", delta="No prazo")
+            k3.metric("Faltam", faltam)
+            if inadimplentes > 0: k4.metric("🚨 Inadimplentes", inadimplentes, delta="-Atrasados", delta_color="inverse")
+            else: k4.metric("Inadimplentes", "0", delta="OK")
 
             st.divider()
-            
-            st.info("Modo Admin: Marque as caixas e clique em Salvar.")
-            
-            # Tabela Editável
             edited = st.data_editor(df_fin, use_container_width=True, hide_index=True)
             if st.button("SALVAR PAGAMENTOS"):
-                if save_data(edited, "financeiro"):
-                    st.success("Financeiro Atualizado!")
-                    st.rerun()
+                save_data(edited, "financeiro"); st.success("Salvo!"); st.rerun()
         else:
-            # --- VISITANTE ---
             total = df_fin.shape[0]
             st.metric("Total de Atletas Mensalistas", total)
-            st.info("ℹ️ Abaixo, a lista de mensalistas ativos. Detalhes de pagamento são restritos.")
-            
-            df_visitor = df_fin[['nome']].rename(columns={"nome": "Atleta"})
-            st.dataframe(df_visitor, use_container_width=True, hide_index=True)
+            st.info("ℹ️ Abaixo, a lista de mensalistas ativos.")
+            st.dataframe(df_fin[['nome']].rename(columns={"nome": "Atleta"}), use_container_width=True, hide_index=True)
     else:
-        st.warning("Sem dados de mensalistas.")
+        st.warning("Sem dados.")
 
-# === ABA 5: ESTATÍSTICAS ===
+# === ABA 5: ESTATÍSTICAS (COM GRÁFICO DE EVOLUÇÃO) ===
 with tab5:
     st.header("📊 Estatísticas")
     hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
     if not hist.empty:
+        # PLACAR GERAL
         vt = hist[['id','vencedor']].drop_duplicates()['vencedor'].value_counts()
         c1,c2,c3 = st.columns(3)
         c1.metric("Time Verde 🦉 💚", vt.get("Verde",0))
@@ -403,28 +472,22 @@ with tab5:
         with ca:
             st.subheader("Artilharia")
             hist['gols'] = pd.to_numeric(hist['gols'], errors='coerce').fillna(0)
+            
+            # Tabela Agrupada
             g = hist[hist['gols']>0].groupby("jogador")['gols'].sum().sort_values(ascending=False).reset_index()
             
-            # --- VERSÃO PARA O SITE (COM MEDALHA) ---
+            # Exibição Site
             g_site = g.copy()
             if not g_site.empty:
                 max_gols = g_site['gols'].max()
                 g_site['jogador'] = g_site.apply(lambda x: f"🥇 {x['jogador']}" if x['gols'] == max_gols else x['jogador'], axis=1)
-
             st.dataframe(g_site, use_container_width=True, hide_index=True)
             
-            # --- VERSÃO PARA O PRINT (SEM MEDALHA, TEXTO LIMPO) ---
-            st.write("")
-            g_print = g.copy() 
+            # Print Limpo
+            g_print = g.copy()
             g_print.columns = ["ATLETA", "GOLS"]
             img_buffer_art = gerar_imagem_bonita(g_print, titulo="ARTILHARIA MADRUGAO")
-            
-            st.download_button(
-                label="📸 Baixar Artilharia",
-                data=img_buffer_art,
-                file_name="artilharia.png",
-                mime="image/png"
-            )
+            st.download_button("📸 Baixar Artilharia", img_buffer_art, "artilharia.png", "image/png")
 
         with cb:
             st.subheader("Presença")
@@ -433,6 +496,22 @@ with tab5:
             f = pd.concat([j,ju], axis=1).fillna(0).astype(int)
             f['Total'] = f['Jogos'] + f['Justif.']
             st.dataframe(f.sort_values('Jogos', ascending=False), use_container_width=True)
+
+        # --- GRÁFICO DE EVOLUÇÃO (NOVIDADE) ---
+        st.divider()
+        st.subheader("📈 Corrida da Artilharia")
+        # Filtra apenas registros de jogo com gols
+        df_gols = hist[(hist['tipo_registro'] == 'Jogo')]
+        if not df_gols.empty:
+            # Pivota: Linhas=Data, Colunas=Jogador, Valor=Gols
+            pivot = df_gols.pivot_table(index='data', columns='jogador', values='gols', aggfunc='sum').fillna(0)
+            # Soma Acumulada
+            cumulativo = pivot.cumsum()
+            # Mostra Gráfico
+            st.line_chart(cumulativo)
+        else:
+            st.info("Sem dados de gols para gerar gráfico.")
+
     else:
         st.info("Sem dados ainda.")
 
@@ -447,8 +526,7 @@ if is_admin:
                 c1,c2 = st.columns([4,1])
                 c1.write(f"📅 {r['data']} - {r['vencedor']}")
                 if c2.button("Apagar", key=f"d_{r['id']}"):
-                    if save_data(hist[hist['id']!=r['id']], "jogos"):
-                        st.rerun()
+                    save_data(hist[hist['id']!=r['id']], "jogos"); st.rerun()
 
 # --- CRÉDITOS / RODAPÉ ---
 st.write("")
@@ -457,7 +535,7 @@ st.divider()
 st.markdown(
     """
     <div style='text-align: center; color: grey; font-size: 14px;'>
-        Desenvolvido por <b>Lucas Guilherme</b> | 📱 (81) 99964-4971
+        Desenvolvido por <b>Lucas Guilherme</b> | 📱 (81) 99964-4971 (wpp)
     </div>
     """,
     unsafe_allow_html=True
