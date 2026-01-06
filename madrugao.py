@@ -110,6 +110,12 @@ else:
 
 st.title("⚽ Gestão Madrugão")
 
+# --- DEBUG (Apagar depois que funcionar) ---
+try:
+    st.write("Tentando conectar com o e-mail:", st.secrets["gcp_service_account"]["client_email"])
+except:
+    st.error("Não consegui ler o e-mail dos segredos.")
+
 # Carrega dados da nuvem
 df_elenco = carregar_elenco()
 
