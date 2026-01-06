@@ -6,9 +6,22 @@ from datetime import datetime
 import random
 import matplotlib.pyplot as plt
 import io
+import os
 
 # --- CONFIGURAÇÕES ---
 st.set_page_config(page_title="Pelada Madrugão", page_icon="🦉", layout="wide")
+
+# --- BARRA LATERAL COM LOGO ---
+with st.sidebar:
+    # Tenta mostrar a logo se ela existir no GitHub
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
+    else:
+        st.warning("⚠️ Para ver a logo, suba o arquivo 'logo.png' no GitHub.")
+    
+    st.title("🔒 Área Restrita")
+
+# --- TÍTULO PRINCIPAL ---
 st.title("Pelada Madrugão 🦉 💚 🖤")
 
 # --- CONEXÃO COM GOOGLE SHEETS ---
@@ -59,33 +72,46 @@ def save_data(df, sheet_name):
         st.error(f"Erro ao salvar: {e}")
         return False
 
-# --- FUNÇÃO GERADORA DE IMAGEM (PRINT) ---
-def gerar_imagem_tabela(df, titulo="Relatório"):
-    # Cria uma figura
-    fig, ax = plt.subplots(figsize=(10, len(df) * 0.5 + 2)) # Altura dinâmica
+# --- NOVA FUNÇÃO DE PRINT (ESTILO HD) ---
+def gerar_imagem_bonita(df, titulo="Relatório"):
+    # Configurações de Design
+    cor_cabecalho = '#2E7D32' # Verde Madrugão
+    cor_texto_cabecalho = 'white'
+    cor_linha_par = '#E8F5E9' # Verde bem clarinho
+    cor_linha_impar = 'white'
+    
+    # Cria a figura com alta resolução
+    fig, ax = plt.subplots(figsize=(10, len(df) * 0.6 + 2)) 
     ax.axis('tight')
     ax.axis('off')
     
-    # Título da imagem
-    plt.title(titulo, fontsize=16, weight='bold', pad=20)
+    # Título
+    plt.title(titulo, fontsize=18, weight='bold', color='#1b5e20', pad=20)
     
-    # Desenha a tabela
+    # Cria a tabela
     tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center')
     
-    # Estilização
+    # Estilização Profissional
     tabela.auto_set_font_size(False)
-    tabela.set_fontsize(10)
-    tabela.scale(1.2, 1.2) # Escala para ficar legível
+    tabela.set_fontsize(12)
+    tabela.scale(1.2, 1.8) # Aumenta altura das células
     
-    # Cores no cabeçalho
-    for key, cell in tabela.get_celld().items():
-        if key[0] == 0: # Cabeçalho
-            cell.set_facecolor('#d1e7dd') # Verde claro
-            cell.set_text_props(weight='bold')
+    for (row, col), cell in tabela.get_celld().items():
+        cell.set_edgecolor('white') # Remove bordas pretas feias
+        cell.set_height(0.08)
+        
+        if row == 0: # Cabeçalho
+            cell.set_facecolor(cor_cabecalho)
+            cell.set_text_props(color=cor_texto_cabecalho, weight='bold')
+        else: # Linhas de dados
+            if row % 2 == 0:
+                cell.set_facecolor(cor_linha_par)
+            else:
+                cell.set_facecolor(cor_linha_impar)
     
-    # Salva na memória (buffer)
+    # Salva
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+    plt.savefig(buf, format='png', bbox_inches='tight', dpi=300, transparent=False)
     buf.seek(0)
     return buf
 
@@ -136,7 +162,6 @@ def carregar_elenco():
 # --- LOGIN ---
 SENHA_ADMIN = st.secrets.get("admin_password", "1234")
 
-st.sidebar.title("🔒 Área Restrita")
 senha_digitada = st.sidebar.text_input("Senha de Admin", type="password")
 is_admin = senha_digitada == SENHA_ADMIN
 
@@ -350,23 +375,22 @@ with tab4:
 
             st.divider()
             
-            # --- ÁREA DE DOWNLOAD (PRINT) - SÓ ADMIN ---
+            # --- ÁREA DE DOWNLOAD (PRINT) ---
             st.info("Modo Admin: Marque as caixas e clique em Salvar.")
             col_print, col_table = st.columns([1, 4])
             
             with col_print:
-                # Prepara os dados para o Print (Substitui True/False por Sim/Não ou Emoji)
+                # Prepara dados para o print HD
                 df_print = df_fin.copy()
-                # Mostra apenas o nome e o mês atual no print, pra não ficar gigante
                 cols_print = ["nome", mes_atual]
                 df_print = df_print[cols_print]
-                df_print[mes_atual] = df_print[mes_atual].apply(lambda x: "✅" if x else "❌")
-                df_print.columns = ["Atleta", f"Pago ({mes_atual})"]
+                # Usa Sim/Não para ficar mais bonito na imagem
+                df_print[mes_atual] = df_print[mes_atual].apply(lambda x: "PAGO" if x else "PENDENTE")
+                df_print.columns = ["Atleta", f"Mês {mes_atual}"]
                 
-                # Gera o botão
-                img_buffer = gerar_imagem_tabela(df_print, titulo=f"Financeiro - {mes_atual}")
+                img_buffer = gerar_imagem_bonita(df_print, titulo=f"Financeiro Madrugão - {mes_atual}")
                 st.download_button(
-                    label="📸 Baixar Print",
+                    label="📸 Baixar Relatório",
                     data=img_buffer,
                     file_name=f"financeiro_{mes_atual}.png",
                     mime="image/png"
@@ -412,9 +436,9 @@ with tab5:
 
             st.dataframe(g, use_container_width=True, hide_index=True)
             
-            # --- BOTÃO DE DOWNLOAD (PÚBLICO) ---
+            # --- BOTÃO DE DOWNLOAD ARTILHARIA (HD) ---
             st.write("")
-            img_buffer_art = gerar_imagem_tabela(g, titulo="Artilharia Madrugão")
+            img_buffer_art = gerar_imagem_bonita(g, titulo="Artilharia Madrugão")
             st.download_button(
                 label="📸 Baixar Artilharia",
                 data=img_buffer_art,
