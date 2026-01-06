@@ -211,7 +211,7 @@ if is_admin:
             if save_data(pd.concat([hist, pd.DataFrame(nv)]), "jogos"):
                 st.toast("Súmula Salva!", icon="✅")
 
-# === ABA 3: ELENCO (COM O VISUAL 'C') ===
+# === ABA 3: ELENCO ===
 if is_admin:
     with tab3:
         st.header("Gerenciar Elenco")
@@ -237,35 +237,24 @@ if is_admin:
         with c2:
             st.subheader("✏️ Editar / Remover")
             if not df_elenco.empty:
-                # --- AQUI ESTÁ A MÁGICA VISUAL DO (C) ---
                 def formatar_nome_display(nome_original):
-                    # Procura o jogador na tabela
                     row = df_elenco[df_elenco['nome'] == nome_original]
                     if not row.empty:
-                        # Se o time for 'Ambos', adiciona o (C) visualmente
-                        if row.iloc[0]['time'] == 'Ambos':
-                            return f"{nome_original} (C)"
+                        time = row.iloc[0]['time']
+                        if time == 'Verde': return f"{nome_original} 💚"
+                        elif time == 'Preto': return f"{nome_original} 🖤"
+                        elif time == 'Ambos': return f"{nome_original} (C)"
                     return nome_original
 
                 nomes_lista = sorted(df_elenco['nome'].astype(str).tolist())
-                
-                # O 'format_func' muda apenas o que a gente VÊ, não o valor real 's'
-                s = st.selectbox(
-                    "Selecione para editar:", 
-                    nomes_lista, 
-                    format_func=formatar_nome_display
-                )
+                s = st.selectbox("Selecione:", nomes_lista, format_func=formatar_nome_display)
                 
                 if s:
-                    # Mostra os dados atuais
                     r = df_elenco[df_elenco['nome']==s].iloc[0]
-                    
-                    # Define índices padrão
                     try: ix = ["Verde","Preto","Ambos"].index(r['time'])
                     except: ix = 0
                     try: ixp = ["Mensalista","Diarista Frequente"].index(r['tipo'])
                     except: ixp = 0
-                    
                     nt = st.selectbox("Novo Time:", ["Verde","Preto","Ambos"], index=ix, key="edit_time")
                     ntp = st.selectbox("Novo Tipo:", ["Mensalista","Diarista Frequente"], index=ixp, key="edit_tipo")
                     
@@ -276,14 +265,13 @@ if is_admin:
                         if save_data(df_elenco, "elenco"):
                             st.success("Alteração salva!")
                             st.rerun()
-                            
                     if cb2.button("🗑️ EXCLUIR"):
                         novo_df = df_elenco[df_elenco['nome']!=s]
                         if save_data(novo_df, "elenco"):
                             st.warning(f"{s} removido!")
                             st.rerun()
 
-# === ABA 4: FINANCEIRO ===
+# === ABA 4: FINANCEIRO (COM DASHBOARD) ===
 with tab4:
     st.header("💰 Financeiro")
     if not df_elenco.empty:
@@ -291,6 +279,7 @@ with tab4:
         cols = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
         df_fin = load_data("financeiro", cols)
         
+        # Sincronia
         if not df_fin.empty:
             for nm in df_mens['nome']:
                 if nm not in df_fin['nome'].values:
@@ -302,12 +291,41 @@ with tab4:
             df_fin = df_mens.copy()
             for c in cols[1:]: df_fin[c] = False
         
+        # --- DASHBOARD FINANCEIRO ---
+        hoje = datetime.today()
+        meses_map = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
+        mes_atual = meses_map[hoje.month]
+        dia_hoje = hoje.day
+
+        # Calcula quem já pagou (considera TRUE quem tem qualquer valor verdadeiro)
+        pagos = df_fin[df_fin[mes_atual].apply(lambda x: x == True or str(x).upper() == "TRUE")].shape[0]
+        total = df_fin.shape[0]
+        faltam = total - pagos
+        
+        # Regra de inadimplência: Só mostra se for dia > 20
+        inadimplentes = faltam if dia_hoje > 20 else 0
+
+        # Mostra os Cards
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Total Atletas", total)
+        k2.metric(f"Pagos ({mes_atual})", pagos)
+        k3.metric("Faltam Pagar", faltam)
+        
+        if inadimplentes > 0:
+            k4.metric("🚨 Inadimplentes", inadimplentes, delta="-Atrasados", delta_color="inverse")
+        else:
+            k4.metric("Inadimplentes", "0", delta="No prazo")
+
+        st.divider()
+
+        # Tabela
         if is_admin:
             st.info("Modo Admin: Edite e salve.")
             edited = st.data_editor(df_fin, use_container_width=True, hide_index=True)
             if st.button("SALVAR PAGAMENTOS"):
                 if save_data(edited, "financeiro"):
                     st.success("Financeiro Atualizado!")
+                    st.rerun()
         else:
             st.dataframe(df_fin, use_container_width=True, hide_index=True)
     else:
