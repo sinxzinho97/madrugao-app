@@ -70,46 +70,40 @@ def save_data(df, sheet_name):
         st.error(f"Erro ao salvar: {e}")
         return False
 
-# --- FUNÇÃO GERADORA DE IMAGEM (PRINT HD SEM EMOJI) ---
+# --- FUNÇÃO GERADORA DE IMAGEM (PRINT HD) ---
 def gerar_imagem_bonita(df, titulo="Relatório"):
-    # Configurações de Design
-    cor_cabecalho = '#1b5e20' # Verde Escuro Profissional
+    cor_cabecalho = '#1b5e20' 
     cor_texto_cabecalho = 'white'
-    cor_linha_par = '#f1f8e9' # Verde muito claro
+    cor_linha_par = '#f1f8e9' 
     cor_linha_impar = 'white'
     
-    # Ajuste de tamanho dinâmico (mais altura por linha para nitidez)
     fig, ax = plt.subplots(figsize=(12, len(df) * 0.8 + 2)) 
     ax.axis('tight')
     ax.axis('off')
     
-    # Título
     plt.title(titulo.upper(), fontsize=20, weight='bold', color='#1b5e20', pad=25)
     
-    # Cria a tabela
     tabela = ax.table(cellText=df.values, colLabels=df.columns, loc='center', cellLoc='center')
     
-    # Estilização Profissional
     tabela.auto_set_font_size(False)
-    tabela.set_fontsize(14) # Fonte maior
-    tabela.scale(1.2, 2.0) # Células mais altas
+    tabela.set_fontsize(14)
+    tabela.scale(1.2, 2.0)
     
     for (row, col), cell in tabela.get_celld().items():
-        cell.set_edgecolor('#cfd8dc') # Borda cinza suave
+        cell.set_edgecolor('#cfd8dc')
         cell.set_linewidth(1)
         
-        if row == 0: # Cabeçalho
+        if row == 0:
             cell.set_facecolor(cor_cabecalho)
             cell.set_text_props(color=cor_texto_cabecalho, weight='bold')
-            cell.set_height(0.12) # Cabeçalho mais alto
-        else: # Linhas de dados
+            cell.set_height(0.12)
+        else:
             cell.set_height(0.1)
             if row % 2 == 0:
                 cell.set_facecolor(cor_linha_par)
             else:
                 cell.set_facecolor(cor_linha_impar)
     
-    # Salva com qualidade máxima (300 DPI)
     buf = io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', dpi=300, transparent=False)
     buf.seek(0)
@@ -375,27 +369,8 @@ with tab4:
 
             st.divider()
             
-            # --- ÁREA DE DOWNLOAD (PRINT SEM EMOJI) ---
             st.info("Modo Admin: Marque as caixas e clique em Salvar.")
-            col_print, col_table = st.columns([1, 4])
             
-            with col_print:
-                # Prepara dados LIMPOS para o print
-                df_print = df_fin.copy()
-                cols_print = ["nome", mes_atual]
-                df_print = df_print[cols_print]
-                # Usa TEXTO em vez de Emoji para garantir a qualidade
-                df_print[mes_atual] = df_print[mes_atual].apply(lambda x: "PAGO" if x else "PENDENTE")
-                df_print.columns = ["ATLETA", f"MES {mes_atual.upper()}"]
-                
-                img_buffer = gerar_imagem_bonita(df_print, titulo=f"FINANCEIRO - {mes_atual.upper()}")
-                st.download_button(
-                    label="📸 Baixar Relatório",
-                    data=img_buffer,
-                    file_name=f"financeiro_{mes_atual}.png",
-                    mime="image/png"
-                )
-
             # Tabela Editável
             edited = st.data_editor(df_fin, use_container_width=True, hide_index=True)
             if st.button("SALVAR PAGAMENTOS"):
@@ -440,7 +415,7 @@ with tab5:
             
             # --- VERSÃO PARA O PRINT (SEM MEDALHA, TEXTO LIMPO) ---
             st.write("")
-            g_print = g.copy() # Usa o original sem medalha
+            g_print = g.copy() 
             g_print.columns = ["ATLETA", "GOLS"]
             img_buffer_art = gerar_imagem_bonita(g_print, titulo="ARTILHARIA MADRUGAO")
             
@@ -474,3 +449,16 @@ if is_admin:
                 if c2.button("Apagar", key=f"d_{r['id']}"):
                     if save_data(hist[hist['id']!=r['id']], "jogos"):
                         st.rerun()
+
+# --- CRÉDITOS / RODAPÉ ---
+st.write("")
+st.write("")
+st.divider()
+st.markdown(
+    """
+    <div style='text-align: center; color: grey; font-size: 14px;'>
+        Desenvolvido por <b>Lucas Guilherme</b> | 📱 (81) 99964-4971
+    </div>
+    """,
+    unsafe_allow_html=True
+)
