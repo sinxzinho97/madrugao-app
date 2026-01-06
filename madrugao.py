@@ -16,9 +16,8 @@ with st.sidebar:
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
     else:
-        # Espaço vazio se não tiver logo, sem warning pra ficar limpo
         st.write("")
-    st.title("🔒 Área Restrita")
+    st.title("🔒 Acesso")
 
 # --- TÍTULO PRINCIPAL ---
 st.title("Pelada Madrugão 🦉 💚 🖤")
@@ -71,7 +70,7 @@ def save_data(df, sheet_name):
         st.error(f"Erro ao salvar: {e}")
         return False
 
-# --- FUNÇÃO 1: RELATÓRIOS (TABELAS) ---
+# --- FUNÇÃO RELATÓRIOS ---
 def gerar_imagem_bonita(df, titulo="Relatório"):
     cor_cabecalho = '#1b5e20' 
     cor_texto_cabecalho = 'white'
@@ -109,69 +108,47 @@ def gerar_imagem_bonita(df, titulo="Relatório"):
     buf.seek(0)
     return buf
 
-# --- FUNÇÃO 2: CARD DO JOGO (PLACAR) ---
+# --- FUNÇÃO CARD DO JOGO ---
 def gerar_card_jogo(data_jogo, placar_verde, placar_preto, gols_map, df_elenco):
-    # Separa artilheiros por time
     art_verde = []
     art_preto = []
     
     for jogador, gols in gols_map.items():
         if gols > 0:
-            # Tenta descobrir o time do jogador na lista oficial
             time_jogador = "Indefinido"
             if not df_elenco.empty:
                 row = df_elenco[df_elenco['nome'] == jogador]
                 if not row.empty:
                     time_jogador = row.iloc[0]['time']
             
-            # Formata texto: "Nome (xN)"
             txt = f"{jogador}" if gols == 1 else f"{jogador} ({gols})"
-            
-            # Lógica simples: Se for Verde vai pra esquerda, se for Preto ou Ambos vai pra direita (simplificação)
-            # Idealmente o sorteio define, mas aqui vamos usar o cadastro
             if time_jogador == 'Verde':
                 art_verde.append(txt)
             else:
-                # Preto e Ambos (jogando no preto) assumimos aqui para visualização rápida
-                # Se quiser precisão absoluta precisaria salvar em qual time ele jogou no dia
                 art_preto.append(txt)
 
-    # Cria a Imagem
     fig, ax = plt.subplots(figsize=(10, 8))
     ax.axis('off')
-    
-    # Fundo
     fig.patch.set_facecolor('#f8f9fa')
     
-    # Título e Data
     plt.text(0.5, 0.95, "RESULTADO FINAL", ha='center', va='center', fontsize=22, weight='bold', color='#333')
     plt.text(0.5, 0.88, f"{data_jogo}", ha='center', va='center', fontsize=12, color='#666')
-    
-    # PLACAR GIGANTE
     plt.text(0.25, 0.75, "VERDE", ha='center', fontsize=18, weight='bold', color='#2E7D32')
     plt.text(0.75, 0.75, "PRETO", ha='center', fontsize=18, weight='bold', color='#212121')
-    
     plt.text(0.5, 0.65, f"{placar_verde}  x  {placar_preto}", ha='center', va='center', fontsize=50, weight='bold')
-    
-    # Linha divisória
     plt.plot([0.1, 0.9], [0.55, 0.55], color='#ddd', lw=2)
-    
-    # Lista de Gols
     plt.text(0.5, 0.50, "GOLS", ha='center', fontsize=14, color='#888')
     
-    # Coluna Verde
     y_pos = 0.45
     for art in art_verde:
         plt.text(0.25, y_pos, art, ha='center', fontsize=12, color='#2E7D32')
         y_pos -= 0.05
         
-    # Coluna Preto
     y_pos = 0.45
     for art in art_preto:
         plt.text(0.75, y_pos, art, ha='center', fontsize=12, color='#212121')
         y_pos -= 0.05
         
-    # Rodapé
     plt.text(0.5, 0.05, "PELADA MADRUGAO", ha='center', fontsize=10, color='#aaa', style='italic')
 
     buf = io.BytesIO()
@@ -223,28 +200,43 @@ def carregar_elenco():
         save_data(df, "elenco")
     return df
 
-# --- LOGIN ---
+# --- SISTEMA DE LOGIN (ADMIN vs TESOUREIRO vs VISITANTE) ---
 SENHA_ADMIN = st.secrets.get("admin_password", "1234")
-senha_digitada = st.sidebar.text_input("Senha de Admin", type="password")
-is_admin = senha_digitada == SENHA_ADMIN
+SENHA_FINANCEIRO = st.secrets.get("finance_password", "money")
 
-if is_admin:
-    st.sidebar.success("Modo Admin: ATIVADO")
+senha_digitada = st.sidebar.text_input("Senha", type="password")
+
+user_role = "visitor" # Padrão
+if senha_digitada == SENHA_ADMIN:
+    user_role = "admin"
+    st.sidebar.success("🔑 Modo: ADMIN")
+elif senha_digitada == SENHA_FINANCEIRO:
+    user_role = "finance"
+    st.sidebar.warning("💰 Modo: TESOUREIRO")
 else:
-    st.sidebar.info("Modo Visitante")
+    user_role = "visitor"
+    st.sidebar.info("👀 Modo: VISITANTE")
 
 df_elenco = carregar_elenco()
 
-if is_admin:
+# --- DEFINIÇÃO DE ABAS BASEADO NO PERFIL ---
+if user_role == "admin":
+    # Admin vê tudo
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🎲 Sorteio", "📝 Súmula", "👥 Elenco", "💰 Financeiro", "📊 Estatísticas", "⚙️ Ajustes"
     ])
+elif user_role == "finance":
+    # Tesoureiro foca no dinheiro e vê estatísticas
+    tab4, tab5 = st.tabs(["💰 Financeiro", "📊 Estatísticas"])
+    # As outras abas ficam vazias/invisíveis
+    tab1 = tab2 = tab3 = tab6 = st.container()
 else:
+    # Visitante vê Estatísticas e Resumo Financeiro
     tab5, tab4 = st.tabs(["📊 Estatísticas", "💰 Financeiro"])
     tab1 = tab2 = tab3 = tab6 = st.container()
 
 # === ABA 1: SORTEIO ===
-if is_admin:
+if user_role == "admin":
     with tab1:
         st.header("Montar Times")
         c1, c2 = st.columns([1, 2])
@@ -289,7 +281,7 @@ if is_admin:
                             if idx>=0: st.write(f"{MAX+i+1}º {r} entra por {tit[idx]}")
 
 # === ABA 2: SÚMULA (COM CARD DE JOGO) ===
-if is_admin:
+if user_role == "admin":
     with tab2:
         st.header("Súmula")
         dt = st.date_input("Data", datetime.today())
@@ -320,21 +312,16 @@ if is_admin:
                 if qg:
                     cols = st.columns(3)
                     for i, a in enumerate(qg):
-                        # Pega o time do jogador pra somar no placar
-                        t_jog = "Verde" # Default
+                        t_jog = "Verde"
                         if not df_elenco.empty:
                             row = df_elenco[df_elenco['nome'] == a]
                             if not row.empty: t_jog = row.iloc[0]['time']
                         
                         gols = cols[i%3].number_input(f"{a}", 1, 20, 1, key=f"g_{a}")
                         gm[a] = gols
-                        
-                        # Soma placar estimado (baseado no cadastro)
                         if t_jog == "Verde": score_verde += gols
                         elif t_jog == "Preto": score_preto += gols
-                        else: 
-                            # Se for "Ambos", a gente não sabe onde jogou, soma 0 ou avisa
-                            pass 
+                        else: pass 
 
         c_save, c_print = st.columns([1, 1])
         if c_save.button("💾 SALVAR SÚMULA", type="primary"):
@@ -348,19 +335,16 @@ if is_admin:
                 st.toast("Súmula Salva!", icon="✅")
                 st.session_state['ultimo_placar'] = (score_verde, score_preto, gm)
 
-        # Botão de Gerar Card (aparece se tiver algo salvo ou gols lançados)
         if gm:
             with c_print:
-                # Usa placar manual ou calculado
                 placar_v_man = st.number_input("Placar Verde", value=score_verde, min_value=0)
                 placar_p_man = st.number_input("Placar Preto", value=score_preto, min_value=0)
-                
                 img_card = gerar_card_jogo(str(dt), placar_v_man, placar_p_man, gm, df_elenco)
                 st.download_button("📸 Baixar Card do Jogo", img_card, f"jogo_{dt}.png", "image/png")
 
 
 # === ABA 3: ELENCO ===
-if is_admin:
+if user_role == "admin":
     with tab3:
         st.header("Gerenciar Elenco")
         c1, c2 = st.columns(2)
@@ -428,7 +412,8 @@ with tab4:
         
         for c in cols[1:]: df_fin[c] = df_fin[c].astype(str).str.upper() == 'TRUE'
 
-        if is_admin:
+        # PERMISSÃO DE EDIÇÃO: ADMIN OU TESOUREIRO (FINANCE)
+        if user_role in ["admin", "finance"]:
             hoje = datetime.today()
             meses_map = {1:"Jan", 2:"Fev", 3:"Mar", 4:"Abr", 5:"Mai", 6:"Jun", 7:"Jul", 8:"Ago", 9:"Set", 10:"Out", 11:"Nov", 12:"Dez"}
             mes_atual = meses_map[hoje.month]
@@ -445,10 +430,14 @@ with tab4:
             else: k4.metric("Inadimplentes", "0", delta="OK")
 
             st.divider()
+            if user_role == "finance":
+                st.info("Modo Tesoureiro: Você tem permissão para editar os pagamentos.")
+            
             edited = st.data_editor(df_fin, use_container_width=True, hide_index=True)
             if st.button("SALVAR PAGAMENTOS"):
                 save_data(edited, "financeiro"); st.success("Salvo!"); st.rerun()
         else:
+            # Visitante
             total = df_fin.shape[0]
             st.metric("Total de Atletas Mensalistas", total)
             st.info("ℹ️ Abaixo, a lista de mensalistas ativos.")
@@ -456,12 +445,11 @@ with tab4:
     else:
         st.warning("Sem dados.")
 
-# === ABA 5: ESTATÍSTICAS (COM GRÁFICO DE EVOLUÇÃO) ===
+# === ABA 5: ESTATÍSTICAS ===
 with tab5:
     st.header("📊 Estatísticas")
     hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
     if not hist.empty:
-        # PLACAR GERAL
         vt = hist[['id','vencedor']].drop_duplicates()['vencedor'].value_counts()
         c1,c2,c3 = st.columns(3)
         c1.metric("Time Verde 🦉 💚", vt.get("Verde",0))
@@ -472,18 +460,14 @@ with tab5:
         with ca:
             st.subheader("Artilharia")
             hist['gols'] = pd.to_numeric(hist['gols'], errors='coerce').fillna(0)
-            
-            # Tabela Agrupada
             g = hist[hist['gols']>0].groupby("jogador")['gols'].sum().sort_values(ascending=False).reset_index()
             
-            # Exibição Site
             g_site = g.copy()
             if not g_site.empty:
                 max_gols = g_site['gols'].max()
                 g_site['jogador'] = g_site.apply(lambda x: f"🥇 {x['jogador']}" if x['gols'] == max_gols else x['jogador'], axis=1)
             st.dataframe(g_site, use_container_width=True, hide_index=True)
             
-            # Print Limpo
             g_print = g.copy()
             g_print.columns = ["ATLETA", "GOLS"]
             img_buffer_art = gerar_imagem_bonita(g_print, titulo="ARTILHARIA MADRUGAO")
@@ -497,26 +481,20 @@ with tab5:
             f['Total'] = f['Jogos'] + f['Justif.']
             st.dataframe(f.sort_values('Jogos', ascending=False), use_container_width=True)
 
-        # --- GRÁFICO DE EVOLUÇÃO (NOVIDADE) ---
         st.divider()
         st.subheader("📈 Corrida da Artilharia")
-        # Filtra apenas registros de jogo com gols
         df_gols = hist[(hist['tipo_registro'] == 'Jogo')]
         if not df_gols.empty:
-            # Pivota: Linhas=Data, Colunas=Jogador, Valor=Gols
             pivot = df_gols.pivot_table(index='data', columns='jogador', values='gols', aggfunc='sum').fillna(0)
-            # Soma Acumulada
-            cumulativo = pivot.cumsum()
-            # Mostra Gráfico
-            st.line_chart(cumulativo)
+            st.line_chart(pivot.cumsum())
         else:
             st.info("Sem dados de gols para gerar gráfico.")
 
     else:
         st.info("Sem dados ainda.")
 
-# === ABA 6: AJUSTES ===
-if is_admin:
+# === ABA 6: AJUSTES (SÓ ADMIN) ===
+if user_role == "admin":
     with tab6:
         st.header("Ajustes")
         hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
@@ -528,15 +506,10 @@ if is_admin:
                 if c2.button("Apagar", key=f"d_{r['id']}"):
                     save_data(hist[hist['id']!=r['id']], "jogos"); st.rerun()
 
-# --- CRÉDITOS / RODAPÉ ---
-st.write("")
-st.write("")
-st.divider()
+# --- CRÉDITOS ---
+st.write(""); st.write(""); st.divider()
 st.markdown(
-    """
-    <div style='text-align: center; color: grey; font-size: 14px;'>
-        Desenvolvido por <b>Lucas Guilherme</b> | 📱 (81) 99964-4971 (wpp)
-    </div>
-    """,
-    unsafe_allow_html=True
+    """<div style='text-align: center; color: grey; font-size: 14px;'>
+    Desenvolvido por <b>Lucas Guilherme</b> | 📱 (81) 99964-4971 (wpp)
+    </div>""", unsafe_allow_html=True
 )
