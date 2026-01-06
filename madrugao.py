@@ -56,13 +56,17 @@ def load_data(sheet_name, expected_cols):
         return df
     except Exception as e:
         if "429" in str(e):
-            time.sleep(2)
-            st.warning("Muitos acessos. Aguardando Google liberar...")
-            return pd.DataFrame(columns=expected_cols)
+            time.sleep(2) # Espera um pouco se o Google bloquear
+            st.warning("Muitos acessos. Tentando novamente...")
+            try:
+                # Tenta mais uma vez sem cache forçado
+                return load_data.__wrapped__(sheet_name, expected_cols)
+            except:
+                return pd.DataFrame(columns=expected_cols)
         st.error(f"Erro ao ler dados ({sheet_name}): {e}")
         return pd.DataFrame(columns=expected_cols)
 
-# --- SALVAR DADOS (LIMPA O CACHE) ---
+# --- SALVAR DADOS (COM PAUSA TÁTICA) ---
 def save_data(df, sheet_name):
     try:
         sh = get_connection()
@@ -74,7 +78,11 @@ def save_data(df, sheet_name):
         worksheet.clear()
         dados = [df.columns.values.tolist()] + df.values.tolist()
         worksheet.update(range_name='A1', values=dados)
-        st.cache_data.clear()
+        
+        # --- A CORREÇÃO MÁGICA ---
+        # Pausa de 2 segundos para o Google Sheets processar antes de recarregar
+        time.sleep(2) 
+        st.cache_data.clear() # Limpa a memória para forçar atualização
         return True
     except Exception as e:
         st.error(f"Erro ao salvar ({sheet_name}): {e}")
@@ -207,7 +215,7 @@ else:
     tab6, tab4, tab5 = st.tabs(["📊 Estatísticas", "💰 Financeiro", "🏦 Cofre"])
     tab1=tab2=tab3=tab7=st.container()
 
-# === ABA 1: SORTEIO (CORRIGIDO PARA NÃO MOSTRAR NULL) ===
+# === ABA 1: SORTEIO ===
 if user_role == "admin":
     with tab1:
         st.header("Montar Times")
@@ -240,19 +248,14 @@ if user_role == "admin":
                         if len(verde) <= len(preto): verde.append(dn)
                         else: preto.append(dn)
                     
-                    # CORREÇÃO AQUI: LOOP TRADICIONAL
                     ca, cb = st.columns(2)
-                    
                     ca.success(f"VERDE ({len(verde)})")
-                    for x in verde:
-                        ca.write(f"- {x}")
+                    for x in verde: ca.write(f"- {x}")
                     
                     cb.error(f"PRETO ({len(preto)})")
-                    for x in preto:
-                        cb.write(f"- {x}")
+                    for x in preto: cb.write(f"- {x}")
                     
-                    st.write("")
-                    st.info("⚠️ **Nota da Diretoria:** Caso a presença por cor seja desproporcional (ex: 13 Verdes vs 7 Pretos), os ADMs farão o remanejamento manual dos atletas na hora para equilibrar os times.")
+                    st.write(""); st.info("⚠️ **Nota da Diretoria:** Caso a presença por cor seja desproporcional (ex: 13 Verdes vs 7 Pretos), os ADMs farão o remanejamento manual dos atletas na hora para equilibrar os times.")
 
                     if res:
                         st.divider(); st.write("**Reservas:**")
@@ -329,7 +332,11 @@ if user_role == "admin":
             if st.button("Adicionar"):
                 if n and n not in df_elenco['nome'].values:
                     novo_df = pd.concat([df_elenco, pd.DataFrame([{"nome":n,"time":t,"tipo":tp}])], ignore_index=True)
-                    if save_data(novo_df, "elenco"): st.rerun()
+                    if save_data(novo_df, "elenco"): st.success(f"{n} Adicionado!"); st.rerun()
+                elif n in df_elenco['nome'].values:
+                    st.error("Nome já existe!")
+                else:
+                    st.warning("Digite um nome!")
         with c2:
             st.subheader("✏️ Editar")
             if not df_elenco.empty:
@@ -364,14 +371,20 @@ with tab4:
     cols_status = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
     df_checks = load_data("financeiro", cols_status)
     if not df_elenco.empty:
+        # AQUI: FILTRANDO APENAS MENSALISTAS PARA A LISTA
+        # Se quiser que diaristas apareçam, remova o filtro [df_elenco['tipo'] == 'Mensalista']
         df_mens = df_elenco[df_elenco['tipo'] == 'Mensalista'][['nome']].sort_values('nome')
+        
         if not df_checks.empty:
+            # Sincroniza: Adiciona quem falta
             for nm in df_mens['nome']:
                 if nm not in df_checks['nome'].values:
                     nv = {k: False for k in cols_status if k!='nome'}; nv['nome'] = nm
                     df_checks = pd.concat([df_checks, pd.DataFrame([nv])], ignore_index=True)
+            # Remove quem não é mais mensalista (opcional, mas mantém a lista limpa)
             df_checks = df_checks[df_checks['nome'].isin(df_mens['nome'])]
         else:
+            # Se tabela vazia, cria com os mensalistas atuais
             df_checks = df_mens.copy(); 
             for c in cols_status[1:]: df_checks[c] = False
     
