@@ -71,7 +71,6 @@ st.markdown("""
 def render_html_list(titulo, items, cor_classe="box-padrao", cor_titulo="#333"):
     html = f"<div class='box-padrao {cor_classe}'><span class='destaque-titulo' style='color:{cor_titulo}'>{titulo}</span>"
     for item in items:
-        # Se o item for tupla (Nome, Valor), formata bonito
         if isinstance(item, tuple):
             texto, valor = item
             html += f"<div class='zebra-row'><span>{texto}</span> <span style='font-weight:bold'>{valor}</span></div>"
@@ -334,7 +333,6 @@ if user_role == "admin":
 
             ca, cb = st.columns(2)
             
-            # --- LISTAS ZEBRADAS PARA OS TIMES ---
             with ca:
                 lista_verde = [formatar_jogador(x) for x in res_data['verde']]
                 render_html_list(f"VERDE ({len(res_data['verde'])})", lista_verde, "box-verde", "#2e7d32")
@@ -348,7 +346,6 @@ if user_role == "admin":
                 col_res, col_sai = st.columns(2)
                 
                 with col_res:
-                    # Lista de Reservas Zebrada
                     lista_res = []
                     for i, r in enumerate(res_data['reservas']):
                         ordem_reserva = st.session_state.mapa_chegada.get(r.replace(" (D)", ""), "?")
@@ -356,7 +353,6 @@ if user_role == "admin":
                     render_html_list("⏱️ Reservas (Fila)", lista_res, "box-ouro", "#fbc02d")
                 
                 with col_sai:
-                    # Lista de Saída Zebrada
                     titulares_todos = res_data['verde'] + res_data['preto']
                     lista_saida_objs = []
                     for p in titulares_todos:
@@ -488,7 +484,6 @@ if user_role == "admin":
             sv, sp, sgm, sdt = st.session_state['ultimo_placar_dados']
             st.divider()
             
-            # Resultado da Súmula também em Caixas Bonitas
             c_res_v, c_res_p = st.columns(2)
             with c_res_v:
                 render_html_list(f"VERDE: {sv}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Verde' if not df_elenco[df_elenco['nome']==k].empty], "box-verde", "#2e7d32")
@@ -522,7 +517,6 @@ if user_role == "admin":
                     st.success("Elenco atualizado com sucesso!")
                     st.rerun()
         
-        # VISUALIZAÇÃO EM LISTA DO ELENCO (ZEBRADO)
         st.divider()
         st.subheader("📋 Visualização Rápida")
         cv, cp = st.columns(2)
@@ -595,17 +589,25 @@ with tab4:
             edited_checks = st.data_editor(df_checks, use_container_width=True, hide_index=True, key="editor_fin")
             if st.form_submit_button("💾 SALVAR LISTA (CONFIRMAR)"):
                 save_data(edited_checks, "financeiro"); st.success("Atualizado!"); st.rerun()
-    
-    # VISUALIZAÇÃO PARA VISITANTES (HTML BONITO)
     else:
-        pagos = df_checks[df_checks[mes_atual] == True]['nome'].tolist()
-        pendentes = df_checks[df_checks[mes_atual] == False]['nome'].tolist()
+        # VISUALIZAÇÃO APENAS QUANTIDADE PARA VISITANTES
+        pendentes_count = df_checks[df_checks[mes_atual] == False].shape[0]
         
-        c_pag, c_pen = st.columns(2)
-        with c_pag:
-            render_html_list(f"✅ PAGOS ({len(pagos)})", pagos, "box-verde", "#2e7d32")
-        with c_pen:
-            render_html_list(f"🕒 PENDENTES ({len(pendentes)})", pendentes, "box-preto", "#d32f2f")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(f"""
+            <div class='box-padrao box-verde' style='text-align:center;'>
+                <span class='destaque-titulo' style='color:#2e7d32'>✅ PAGOS</span>
+                <span style='font-size: 30px; font-weight: bold;'>{pagos_count}</span>
+            </div>
+            """, unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"""
+            <div class='box-padrao box-preto' style='text-align:center;'>
+                <span class='destaque-titulo' style='color:#d32f2f'>🕒 PENDENTES</span>
+                <span style='font-size: 30px; font-weight: bold;'>{pendentes_count}</span>
+            </div>
+            """, unsafe_allow_html=True)
 
 # === ABA 5: COFRE ===
 with tab5:
@@ -690,7 +692,6 @@ with tab6:
         
         ca, cb = st.columns(2)
         with ca:
-            # ARTILHARIA COM HTML BONITO
             hist['gols'] = pd.to_numeric(hist['gols'], errors='coerce').fillna(0)
             g = hist[hist['gols']>0].groupby("jogador")['gols'].sum().sort_values(ascending=False).reset_index()
             
@@ -703,18 +704,14 @@ with tab6:
             
             render_html_list("⚽ ARTILHARIA", artilharia_html, "box-ouro", "#fbc02d")
             
-            # Botão de download mantém dataframe para gerar a imagem
             g_print = g.copy(); g_print.columns = ["ATLETA", "GOLS"]
             st.download_button("📸 Baixar Imagem", gerar_imagem_bonita(g_print, "ARTILHARIA"), "artilharia.png", "image/png")
 
         with cb:
-            # PRESENÇA COM HTML BONITO
             j = hist[hist['tipo_registro']=='Jogo'].groupby("jogador").size().sort_values(ascending=False)
-            
             presenca_html = []
             for jogador, qtd in j.items():
                 presenca_html.append((jogador, f"{qtd} Jogos"))
-            
             render_html_list("📅 PRESENÇA", presenca_html, "box-azul", "#1565c0")
 
         st.divider(); st.subheader("📈 Corrida da Artilharia")
