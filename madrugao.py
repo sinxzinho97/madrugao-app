@@ -283,13 +283,11 @@ LISTA_PADRAO = [
 ]
 
 def carregar_elenco():
-    # Agora carrega também o Nível
     df = load_data("elenco", ["nome", "time", "tipo", "punicao", "nivel"])
     if df.empty:
         df = pd.DataFrame(columns=["nome", "time", "tipo", "punicao", "nivel"])
         save_data(df, "elenco")
     
-    # Preenchimento de segurança
     if "punicao" not in df.columns: df["punicao"] = "Não"
     if "nivel" not in df.columns: df["nivel"] = 2
     
@@ -297,7 +295,7 @@ def carregar_elenco():
 
 # --- LOGIN (ATUALIZADO COM MODERADOR) ---
 SENHA_ADMIN = st.secrets.get("admin_password", "1234")
-SENHA_MODERADOR = st.secrets.get("moderator_password", "bola") # Nova Senha
+SENHA_MODERADOR = st.secrets.get("moderator_password", "bola") 
 SENHA_FINANCEIRO = st.secrets.get("finance_password", "money")
 senha_digitada = st.sidebar.text_input("Senha", type="password")
 
@@ -341,7 +339,6 @@ if user_role in ["admin", "moderator"]:
             st.subheader("1. Diaristas")
             with st.form("form_add_diarista", clear_on_submit=True):
                 novo_diarista = st.text_input("Nome:")
-                # REMOVIDO: Seleção de Nível do Diarista (Fica padrão 2)
                 add_btn = st.form_submit_button("➕ Adicionar")
                 if add_btn and novo_diarista:
                     st.session_state.temp_diaristas.append({"nome": novo_diarista, "nivel": 2})
@@ -349,7 +346,7 @@ if user_role in ["admin", "moderator"]:
             
             if st.session_state.temp_diaristas:
                 st.caption("Lista de Diaristas:")
-                # Exibição simplificada (Sem mostrar nível)
+                # Exibição simplificada
                 lista_dia = [f"{i+1}. {d['nome']}" for i, d in enumerate(st.session_state.temp_diaristas)]
                 render_html_list("Diaristas Adicionados", lista_dia, "box-azul", "#1F6FEB")
                 
@@ -375,10 +372,8 @@ if user_role in ["admin", "moderator"]:
                 submitted = st.form_submit_button("🎲 REALIZAR SORTEIO", type="primary")
                 
                 if submitted:
-                    # Monta lista de objetos
                     pool_completo = []
                     
-                    # Mensalistas
                     for m in mens:
                         row = df_elenco[df_elenco['nome'] == m].iloc[0]
                         pool_completo.append({
@@ -388,7 +383,6 @@ if user_role in ["admin", "moderator"]:
                             "tipo": "Mensalista"
                         })
                         
-                    # Diaristas (Nível 2 fixo)
                     for d in st.session_state.temp_diaristas:
                         pool_completo.append({
                             "nome": f"{d['nome']} (D)",
@@ -416,7 +410,7 @@ if user_role in ["admin", "moderator"]:
                         verde.extend([p['nome'] for p in fixos_verde])
                         preto.extend([p['nome'] for p in fixos_preto])
                         
-                        # Ordena flutuantes por Nível para balancear (mas sem mostrar o nível no app)
+                        # Ordena flutuantes por Nível para balancear
                         flutuantes.sort(key=lambda x: x['nivel']) 
                         
                         for p in flutuantes:
@@ -596,7 +590,7 @@ if user_role in ["admin", "moderator"]:
             with c_res_v:
                 render_html_list(f"VERDE: {sv}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Verde' if not df_elenco[df_elenco['nome']==k].empty], "box-verde", "#2e7d32")
             with c_res_p:
-                render_html_list(f"PRETO: {sp}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Preto' if not df_elenco[df_elenco['nome']==k].empty], "box-preto", "#212121")
+                render_html_list(f"PRETO: {sp}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Preto' if not df_elenco[df_elenco['nome']==k].empty], "box-preto", "#F0F6FC")
 
             st.divider()
             img_card = gerar_card_jogo(sdt, sv, sp, sgm, df_elenco)
@@ -620,7 +614,7 @@ if user_role in ["admin", "moderator"]:
                         "nivel": st.column_config.SelectboxColumn("Nível (1=Craque)", options=[1, 2, 3], required=True)
                     }
                 else: # Moderador
-                    df_to_show = df_elenco.drop(columns=["nivel"]) # Remove coluna visualmente
+                    df_to_show = df_elenco.drop(columns=["nivel"]) 
                     col_conf = {
                         "nome": st.column_config.TextColumn("Nome", disabled=True),
                         "time": st.column_config.SelectboxColumn("Time", options=["Verde", "Preto", "Ambos"], required=True),
@@ -636,12 +630,8 @@ if user_role in ["admin", "moderator"]:
                     height=400
                 )
                 if st.form_submit_button("💾 SALVAR ALTERAÇÕES NA TABELA"):
-                    # Se for moderador, precisa 're-colar' a coluna nivel original antes de salvar
                     if user_role == "moderator":
-                        # Pega o df original para manter os níveis, e atualiza só o resto
-                        # Maneira segura: iterar e atualizar
                         for i, r in df_editor.iterrows():
-                            # Acha indice correspondente no df_elenco original
                             idx_orig = df_elenco[df_elenco['nome'] == r['nome']].index
                             if not idx_orig.empty:
                                 idx = idx_orig[0]
@@ -657,7 +647,7 @@ if user_role in ["admin", "moderator"]:
         
         st.divider()
         st.subheader("📋 Visualização Rápida")
-        cv, cp = st.columns(2)
+        cv, cp, ca = st.columns(3) # 3 Colunas agora
         with cv:
             verde_list = []
             for _, r in df_elenco[df_elenco['time'] == 'Verde'].iterrows():
@@ -670,6 +660,12 @@ if user_role in ["admin", "moderator"]:
                 extra = f" (Nv {r['nivel']})" if user_role == "admin" else ""
                 preto_list.append(f"{r['nome']}{extra}")
             render_html_list("ELENCO PRETO", sorted(preto_list), "box-preto", "#F0F6FC")
+        with ca:
+            ambos_list = []
+            for _, r in df_elenco[df_elenco['time'] == 'Ambos'].iterrows():
+                extra = f" (Nv {r['nivel']})" if user_role == "admin" else ""
+                ambos_list.append(f"{r['nome']}{extra}")
+            render_html_list("CURINGAS (AMBOS)", sorted(ambos_list), "box-ouro", "#D29922")
 
         st.divider()
         c1, c2 = st.columns(2)
@@ -680,7 +676,6 @@ if user_role in ["admin", "moderator"]:
                 t = st.selectbox("Time", ["Verde", "Preto", "Ambos"])
                 tp = st.selectbox("Tipo", ["Mensalista", "Diarista Frequente"])
                 
-                # Apenas ADMIN vê opção de nível
                 nv = 2
                 if user_role == "admin":
                     nv = st.selectbox("Nível (1=Craque)", [1, 2, 3], index=1)
