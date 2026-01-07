@@ -13,44 +13,72 @@ import time
 icone_aba = "logo.png" if os.path.exists("logo.png") else "🦉"
 st.set_page_config(page_title="Pelada Madrugão", page_icon=icone_aba, layout="wide")
 
-# --- CSS PERSONALIZADO (VISUAL ZEBRA) ---
+# --- CSS PERSONALIZADO (VISUAL ZEBRA & CAIXAS) ---
 st.markdown("""
     <style>
-    /* Estilo para listas zebradas (Um escuro, um claro) */
+    /* Estilo para listas zebradas */
     .zebra-row:nth-child(even) {
-        background-color: rgba(0, 0, 0, 0.05); /* Cinza bem clarinho */
+        background-color: rgba(0, 0, 0, 0.05);
         border-radius: 5px;
     }
     .zebra-row:nth-child(odd) {
-        background-color: rgba(255, 255, 255, 0.1); /* Transparente/Branco */
+        background-color: rgba(255, 255, 255, 0.1);
         border-radius: 5px;
     }
     .zebra-row {
-        padding: 5px 10px;
+        padding: 6px 12px;
         margin-bottom: 2px;
-        font-size: 16px;
+        font-size: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }
-    /* Caixas dos Times */
-    .team-box-verde {
+    
+    /* Caixas Temáticas */
+    .box-padrao {
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    .box-verde {
         border-left: 6px solid #2e7d32;
         background-color: rgba(46, 125, 50, 0.1);
-        padding: 15px;
-        border-radius: 8px;
     }
-    .team-box-preto {
+    .box-preto {
         border-left: 6px solid #212121;
         background-color: rgba(33, 33, 33, 0.1);
-        padding: 15px;
-        border-radius: 8px;
     }
+    .box-ouro {
+        border-left: 6px solid #fbc02d;
+        background-color: rgba(251, 192, 45, 0.1);
+    }
+    .box-azul {
+        border-left: 6px solid #1565c0;
+        background-color: rgba(21, 101, 192, 0.1);
+    }
+    
     .destaque-titulo {
         font-weight: bold;
-        font-size: 20px;
+        font-size: 18px;
         margin-bottom: 10px;
         display: block;
+        text-transform: uppercase;
     }
     </style>
 """, unsafe_allow_html=True)
+
+# --- FUNÇÃO AUXILIAR PARA GERAR HTML LISTA ---
+def render_html_list(titulo, items, cor_classe="box-padrao", cor_titulo="#333"):
+    html = f"<div class='box-padrao {cor_classe}'><span class='destaque-titulo' style='color:{cor_titulo}'>{titulo}</span>"
+    for item in items:
+        # Se o item for tupla (Nome, Valor), formata bonito
+        if isinstance(item, tuple):
+            texto, valor = item
+            html += f"<div class='zebra-row'><span>{texto}</span> <span style='font-weight:bold'>{valor}</span></div>"
+        else:
+            html += f"<div class='zebra-row'>{item}</div>"
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
 
 # --- BARRA LATERAL ---
 with st.sidebar:
@@ -242,7 +270,10 @@ if user_role == "admin":
             
             if st.session_state.temp_diaristas:
                 st.caption("Lista de Diaristas:")
-                for i, d in enumerate(st.session_state.temp_diaristas): st.text(f"{i+1}. {d}")
+                # Visual zebrado para diaristas
+                lista_diaristas_html = [f"{i+1}. {d}" for i, d in enumerate(st.session_state.temp_diaristas)]
+                render_html_list("Diaristas Adicionados", lista_diaristas_html, "box-azul", "#1565c0")
+                
                 if st.button("Limpar Lista"):
                     st.session_state.temp_diaristas = []; st.rerun()
 
@@ -255,18 +286,16 @@ if user_role == "admin":
                 mens = st.multiselect("Presença (Selecione na ORDEM DE CHEGADA):", nomes, key="t1_m")
                 
                 if mens:
-                    ordem_texto = ", ".join([f"{i+1}. {n}" for i, n in enumerate(mens)])
-                    st.caption(f"🏁 **Ordem Atual:** {ordem_texto}")
+                    st.caption(f"🏁 Selecionados: {len(mens)}")
                 
                 if punidos_nomes:
-                    st.caption(f"⚠️ Punições Pendentes: {', '.join(punidos_nomes)}")
+                    st.error(f"⚠️ Punições Pendentes: {', '.join(punidos_nomes)}")
 
                 st.write("")
                 submitted = st.form_submit_button("🎲 REALIZAR SORTEIO", type="primary")
                 
                 if submitted:
                     elenco = mens + st.session_state.temp_diaristas
-                    
                     mapa_chegada = {nome: i+1 for i, nome in enumerate(elenco)}
                     st.session_state.mapa_chegada = mapa_chegada
                     
@@ -293,8 +322,6 @@ if user_role == "admin":
             res_data = st.session_state.resultado_sorteio
             st.divider()
             
-            # --- RENDERIZAÇÃO VISUAL COM HTML (ZEBRA) ---
-            
             def formatar_jogador(nome):
                 clean = nome.replace(" (D)", "")
                 ordem = st.session_state.mapa_chegada.get(clean, "?")
@@ -307,59 +334,48 @@ if user_role == "admin":
 
             ca, cb = st.columns(2)
             
-            # Coluna Verde (Com Estilo)
+            # --- LISTAS ZEBRADAS PARA OS TIMES ---
             with ca:
-                html_verde = "<div class='team-box-verde'><span class='destaque-titulo' style='color:#2e7d32'>VERDE</span>"
-                for i, x in enumerate(res_data['verde']):
-                    html_verde += f"<div class='zebra-row'>{formatar_jogador(x)}</div>"
-                html_verde += f"<div style='margin-top:10px; font-weight:bold; color:#2e7d32'>Total: {len(res_data['verde'])}</div></div>"
-                st.markdown(html_verde, unsafe_allow_html=True)
+                lista_verde = [formatar_jogador(x) for x in res_data['verde']]
+                render_html_list(f"VERDE ({len(res_data['verde'])})", lista_verde, "box-verde", "#2e7d32")
 
-            # Coluna Preto (Com Estilo)
             with cb:
-                html_preto = "<div class='team-box-preto'><span class='destaque-titulo' style='color:#212121'>PRETO</span>"
-                for i, x in enumerate(res_data['preto']):
-                    html_preto += f"<div class='zebra-row'>{formatar_jogador(x)}</div>"
-                html_preto += f"<div style='margin-top:10px; font-weight:bold; color:#212121'>Total: {len(res_data['preto'])}</div></div>"
-                st.markdown(html_preto, unsafe_allow_html=True)
+                lista_preto = [formatar_jogador(x) for x in res_data['preto']]
+                render_html_list(f"PRETO ({len(res_data['preto'])})", lista_preto, "box-preto", "#212121")
             
             if res_data['reservas']:
                 st.divider()
-                
                 col_res, col_sai = st.columns(2)
                 
-                # COLUNA 1: RESERVAS (ZEBRA)
                 with col_res:
-                    st.warning("⏱️ Reservas (Fila de Entrada):")
-                    html_res = "<div>"
+                    # Lista de Reservas Zebrada
+                    lista_res = []
                     for i, r in enumerate(res_data['reservas']):
                         ordem_reserva = st.session_state.mapa_chegada.get(r.replace(" (D)", ""), "?")
-                        html_res += f"<div class='zebra-row'><b>{i+1}.</b> {r} (Chegada: {ordem_reserva}º)</div>"
-                    html_res += "</div>"
-                    st.markdown(html_res, unsafe_allow_html=True)
+                        lista_res.append((f"<b>{i+1}.</b> {r}", f"Chegada: {ordem_reserva}º"))
+                    render_html_list("⏱️ Reservas (Fila)", lista_res, "box-ouro", "#fbc02d")
                 
-                # COLUNA 2: QUEM SAI (ZEBRA)
                 with col_sai:
-                    st.error("🚨 Sugestão de Saída:")
+                    # Lista de Saída Zebrada
                     titulares_todos = res_data['verde'] + res_data['preto']
-                    lista_saida = []
+                    lista_saida_objs = []
                     for p in titulares_todos:
                         clean = p.replace(" (D)", "")
                         num_chegada = st.session_state.mapa_chegada.get(clean, 0)
                         is_punido = clean in punidos_nomes
                         time_icon = "🟢" if p in res_data['verde'] else "⚫"
-                        lista_saida.append({"nome": p, "num": num_chegada, "punido": is_punido, "icon": time_icon})
+                        lista_saida_objs.append({"nome": p, "num": num_chegada, "punido": is_punido, "icon": time_icon})
                     
-                    lista_saida.sort(key=lambda x: (x['punido'], x['num']), reverse=True)
+                    lista_saida_objs.sort(key=lambda x: (x['punido'], x['num']), reverse=True)
                     qtd_reservas = len(res_data['reservas'])
                     
-                    html_sai = "<div>"
-                    for k in range(min(qtd_reservas, len(lista_saida))):
-                        alvo = lista_saida[k]
-                        motivo = "<b>🟥 PUNIÇÃO</b>" if alvo['punido'] else f"Chegada Nº {alvo['num']}"
-                        html_sai += f"<div class='zebra-row'><b>{k+1}. {alvo['nome']}</b> {alvo['icon']} - ({motivo})</div>"
-                    html_sai += "</div>"
-                    st.markdown(html_sai, unsafe_allow_html=True)
+                    lista_sai_fmt = []
+                    for k in range(min(qtd_reservas, len(lista_saida_objs))):
+                        alvo = lista_saida_objs[k]
+                        motivo = "<b style='color:red'>🟥 PUNIÇÃO</b>" if alvo['punido'] else f"Chegada Nº {alvo['num']}"
+                        lista_sai_fmt.append((f"<b>{k+1}. {alvo['nome']}</b> {alvo['icon']}", motivo))
+                    
+                    render_html_list("🚨 Sugestão de Saída", lista_sai_fmt, "box-padrao", "#d32f2f")
 
             st.divider()
             if st.button("📂 CARREGAR ESTES TIMES NA SÚMULA", type="secondary", use_container_width=True):
@@ -471,10 +487,19 @@ if user_role == "admin":
         if 'ultimo_placar_dados' in st.session_state:
             sv, sp, sgm, sdt = st.session_state['ultimo_placar_dados']
             st.divider()
+            
+            # Resultado da Súmula também em Caixas Bonitas
+            c_res_v, c_res_p = st.columns(2)
+            with c_res_v:
+                render_html_list(f"VERDE: {sv}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Verde' if not df_elenco[df_elenco['nome']==k].empty], "box-verde", "#2e7d32")
+            with c_res_p:
+                render_html_list(f"PRETO: {sp}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Preto' if not df_elenco[df_elenco['nome']==k].empty], "box-preto", "#212121")
+
+            st.divider()
             img_card = gerar_card_jogo(sdt, sv, sp, sgm, df_elenco)
             st.download_button("📸 Baixar Card do Jogo", img_card, f"jogo_{sdt}.png", "image/png")
 
-# === ABA 3: ELENCO (COM EDIÇÃO EM MASSA) ===
+# === ABA 3: ELENCO ===
 if user_role == "admin":
     with tab3:
         st.header("Gerenciar Elenco")
@@ -496,6 +521,17 @@ if user_role == "admin":
                     save_data(df_editor, "elenco")
                     st.success("Elenco atualizado com sucesso!")
                     st.rerun()
+        
+        # VISUALIZAÇÃO EM LISTA DO ELENCO (ZEBRADO)
+        st.divider()
+        st.subheader("📋 Visualização Rápida")
+        cv, cp = st.columns(2)
+        with cv:
+            verde_list = df_elenco[df_elenco['time'] == 'Verde']['nome'].tolist()
+            render_html_list("ELENCO VERDE", sorted(verde_list), "box-verde", "#2e7d32")
+        with cp:
+            preto_list = df_elenco[df_elenco['time'] == 'Preto']['nome'].tolist()
+            render_html_list("ELENCO PRETO", sorted(preto_list), "box-preto", "#212121")
 
         st.divider()
         c1, c2 = st.columns(2)
@@ -559,9 +595,17 @@ with tab4:
             edited_checks = st.data_editor(df_checks, use_container_width=True, hide_index=True, key="editor_fin")
             if st.form_submit_button("💾 SALVAR LISTA (CONFIRMAR)"):
                 save_data(edited_checks, "financeiro"); st.success("Atualizado!"); st.rerun()
+    
+    # VISUALIZAÇÃO PARA VISITANTES (HTML BONITO)
     else:
-        st.write("Lista de Mensalistas Ativos:")
-        st.dataframe(df_checks[['nome']].rename(columns={"nome": "Atleta"}), use_container_width=True, hide_index=True)
+        pagos = df_checks[df_checks[mes_atual] == True]['nome'].tolist()
+        pendentes = df_checks[df_checks[mes_atual] == False]['nome'].tolist()
+        
+        c_pag, c_pen = st.columns(2)
+        with c_pag:
+            render_html_list(f"✅ PAGOS ({len(pagos)})", pagos, "box-verde", "#2e7d32")
+        with c_pen:
+            render_html_list(f"🕒 PENDENTES ({len(pendentes)})", pendentes, "box-preto", "#d32f2f")
 
 # === ABA 5: COFRE ===
 with tab5:
@@ -633,7 +677,7 @@ with tab5:
     else:
         st.info("ℹ️ Detalhes restritos à administração.")
 
-# === ABA 6: ESTATÍSTICAS ===
+# === ABA 6: ESTATÍSTICAS (VISUAL ZEBRADO) ===
 with tab6:
     st.header("📊 Estatísticas")
     hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
@@ -646,24 +690,32 @@ with tab6:
         
         ca, cb = st.columns(2)
         with ca:
-            st.subheader("Artilharia")
+            # ARTILHARIA COM HTML BONITO
             hist['gols'] = pd.to_numeric(hist['gols'], errors='coerce').fillna(0)
             g = hist[hist['gols']>0].groupby("jogador")['gols'].sum().sort_values(ascending=False).reset_index()
-            g_site = g.copy()
-            if not g_site.empty:
-                max_gols = g_site['gols'].max()
-                g_site['jogador'] = g_site.apply(lambda x: f"🥇 {x['jogador']}" if x['gols'] == max_gols else x['jogador'], axis=1)
-            st.dataframe(g_site, use_container_width=True, hide_index=True)
+            
+            artilharia_html = []
+            if not g.empty:
+                max_gols = g['gols'].max()
+                for i, r in g.iterrows():
+                    icone = "🥇" if r['gols'] == max_gols else f"{i+1}º"
+                    artilharia_html.append((f"{icone} {r['jogador']}", f"{int(r['gols'])} Gols"))
+            
+            render_html_list("⚽ ARTILHARIA", artilharia_html, "box-ouro", "#fbc02d")
+            
+            # Botão de download mantém dataframe para gerar a imagem
             g_print = g.copy(); g_print.columns = ["ATLETA", "GOLS"]
-            st.download_button("📸 Baixar Artilharia", gerar_imagem_bonita(g_print, "ARTILHARIA"), "artilharia.png", "image/png")
+            st.download_button("📸 Baixar Imagem", gerar_imagem_bonita(g_print, "ARTILHARIA"), "artilharia.png", "image/png")
 
         with cb:
-            st.subheader("Presença")
-            j = hist[hist['tipo_registro']=='Jogo'].groupby("jogador").size().rename("Jogos")
-            ju = hist[hist['tipo_registro']=='Justificado'].groupby("jogador").size().rename("Justif.")
-            f = pd.concat([j,ju], axis=1).fillna(0).astype(int)
-            f['Total'] = f['Jogos'] + f['Justif.']
-            st.dataframe(f.sort_values('Jogos', ascending=False), use_container_width=True)
+            # PRESENÇA COM HTML BONITO
+            j = hist[hist['tipo_registro']=='Jogo'].groupby("jogador").size().sort_values(ascending=False)
+            
+            presenca_html = []
+            for jogador, qtd in j.items():
+                presenca_html.append((jogador, f"{qtd} Jogos"))
+            
+            render_html_list("📅 PRESENÇA", presenca_html, "box-azul", "#1565c0")
 
         st.divider(); st.subheader("📈 Corrida da Artilharia")
         df_gols = hist[(hist['tipo_registro'] == 'Jogo')]
