@@ -213,10 +213,8 @@ if user_role == "admin":
                 nomes = sorted(df_elenco['nome'].astype(str).tolist()) if not df_elenco.empty else []
                 punidos_nomes = df_elenco[df_elenco['punicao'] == 'Sim']['nome'].tolist()
                 
-                # Seleção por ordem de chegada
                 mens = st.multiselect("Presença (Selecione na ORDEM DE CHEGADA):", nomes, key="t1_m")
                 
-                # Mostra a ordem atual para confirmação visual
                 if mens:
                     ordem_texto = ", ".join([f"{i+1}. {n}" for i, n in enumerate(mens)])
                     st.caption(f"🏁 **Ordem Atual:** {ordem_texto}")
@@ -230,7 +228,6 @@ if user_role == "admin":
                 if submitted:
                     elenco = mens + st.session_state.temp_diaristas
                     
-                    # Cria mapa de ordem de chegada (1..N)
                     mapa_chegada = {nome: i+1 for i, nome in enumerate(elenco)}
                     st.session_state.mapa_chegada = mapa_chegada
                     
@@ -257,20 +254,14 @@ if user_role == "admin":
             res_data = st.session_state.resultado_sorteio
             st.divider()
             
-            # Formatação Visual com Ordem de Chegada
             def formatar_jogador(nome):
                 clean = nome.replace(" (D)", "")
-                
-                # Recupera ordem
                 ordem = st.session_state.mapa_chegada.get(clean, "?")
                 prefixo = f"**{ordem}º** "
-                
-                # Status
                 status = ""
                 if clean in punidos_nomes:
                     if len(res_data['reservas']) > 0: status = " 🟥 (Sai)"
                     else: status = " ⚠️ (Joga)"
-                
                 return f"{prefixo}{nome}{status}"
 
             ca, cb = st.columns(2)
@@ -282,47 +273,52 @@ if user_role == "admin":
                 for x in res_data['preto']: st.write(f"- {formatar_jogador(x)}")
             
             if res_data['reservas']:
-                st.divider(); st.warning("⏱️ **Reservas / Substituições (Ordem de Chegada):**")
+                st.divider()
                 
-                time_verde = res_data['verde']
-                time_preto = res_data['preto']
-                fila_saida = []
+                # --- VISÃO: QUEM ESPERA & QUEM SAI (v56.0) ---
                 
-                # Prioridade 1: Punidos
-                for p in time_verde:
-                    if p.replace(" (D)", "") in punidos_nomes: fila_saida.append({"nome": p, "time": "Verde", "icon": "🟢", "punido": True})
-                for p in time_preto:
-                    if p.replace(" (D)", "") in punidos_nomes: fila_saida.append({"nome": p, "time": "Preto", "icon": "⚫", "punido": True})
+                col_res, col_sai = st.columns(2)
                 
-                # Prioridade 2: Rotação Normal
-                normal_verde = [p for p in time_verde if p.replace(" (D)", "") not in punidos_nomes]
-                normal_preto = [p for p in time_preto if p.replace(" (D)", "") not in punidos_nomes]
+                # COLUNA 1: BANCO DE RESERVAS
+                with col_res:
+                    st.warning("⏱️ Reservas (Fila de Entrada):")
+                    for i, r in enumerate(res_data['reservas']):
+                        ordem_reserva = st.session_state.mapa_chegada.get(r.replace(" (D)", ""), "?")
+                        st.write(f"**{i+1}.** {r} (Chegada: {ordem_reserva}º)")
                 
-                max_len = max(len(normal_verde), len(normal_preto))
-                for i in range(max_len):
-                    if i < len(normal_verde): fila_saida.append({"nome": normal_verde[i], "time": "Verde", "icon": "🟢", "punido": False})
-                    if i < len(normal_preto): fila_saida.append({"nome": normal_preto[i], "time": "Preto", "icon": "⚫", "punido": False})
-                
-                def get_team_pref(nome_reserva):
-                    clean = nome_reserva.replace(" (D)", "")
-                    row = df_elenco[df_elenco['nome'] == clean]
-                    if not row.empty: return row.iloc[0]['time']
-                    return "Ambos"
-
-                for i, reserva in enumerate(res_data['reservas']):
-                    ordem_reserva = st.session_state.mapa_chegada.get(reserva.replace(" (D)", ""), "?")
+                # COLUNA 2: CANDIDATOS A SAIR
+                with col_sai:
+                    st.error("🚨 Sugestão de Saída (Quem deve sair):")
+                    st.caption("Critério: Punição > Últimos a Chegar")
                     
-                    if i < len(fila_saida):
-                        alvo = fila_saida[i]
-                        pref_reserva = get_team_pref(reserva)
-                        msg_extra = ""
+                    titulares_todos = res_data['verde'] + res_data['preto']
+                    
+                    # Cria lista de objetos para ordenar
+                    lista_saida = []
+                    for p in titulares_todos:
+                        clean = p.replace(" (D)", "")
+                        num_chegada = st.session_state.mapa_chegada.get(clean, 0)
+                        is_punido = clean in punidos_nomes
+                        time_icon = "🟢" if p in res_data['verde'] else "⚫"
                         
-                        if alvo['punido']: msg_extra = " 🟥 (PUNIÇÃO)"
-                        elif (pref_reserva == "Verde" and alvo['time'] == "Preto") or (pref_reserva == "Preto" and alvo['time'] == "Verde"):
-                            msg_extra = " ⚠️ (Joga no Rival)"
-                        
-                        st.markdown(f"**{ordem_reserva}º {reserva}** <span style='color: #e67e22;'> 🔄 (Entra no lugar de: {alvo['nome']} {alvo['icon']}{msg_extra})</span>", unsafe_allow_html=True)
-            
+                        lista_saida.append({
+                            "nome": p,
+                            "num": num_chegada,
+                            "punido": is_punido,
+                            "time_icon": time_icon
+                        })
+                    
+                    # ORDENAÇÃO: Punidos Primeiro, Depois quem tem numero maior (chegou por ultimo)
+                    lista_saida.sort(key=lambda x: (x['punido'], x['num']), reverse=True)
+                    
+                    # Mostra apenas a quantidade necessária (igual ao numero de reservas)
+                    qtd_reservas = len(res_data['reservas'])
+                    
+                    for k in range(min(qtd_reservas, len(lista_saida))):
+                        alvo = lista_saida[k]
+                        motivo = "🟥 PUNIÇÃO" if alvo['punido'] else f"Chegada Nº {alvo['num']}"
+                        st.markdown(f"**{k+1}. {alvo['nome']}** {alvo['time_icon']} - ({motivo})")
+
             st.divider()
             if st.button("📂 CARREGAR ESTES TIMES NA SÚMULA", type="secondary", use_container_width=True):
                 todos = res_data['verde'] + res_data['preto'] + res_data['reservas']
@@ -337,12 +333,11 @@ if user_role == "admin":
                 st.session_state['import_sumula_diar'] = d_sum
                 st.success("✅ Enviado para a Súmula!")
 
-# === ABA 2: SÚMULA (MODO TABELA SEM PISCA-PISCA) ===
+# === ABA 2: SÚMULA (MODO TABELA) ===
 if user_role == "admin":
     with tab2:
         st.header("Súmula")
         
-        # Prepara dados para a tabela
         mens_list = sorted(df_elenco['nome'].astype(str).tolist())
         imp_mens = st.session_state.get('import_sumula_mens', [])
         imp_diar = st.session_state.get('import_sumula_diar', [])
