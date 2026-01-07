@@ -210,12 +210,8 @@ if user_role == "admin":
             st.subheader("2. Mensalistas & Sorteio")
             with st.form("form_sorteio_geral"):
                 nomes = sorted(df_elenco['nome'].astype(str).tolist()) if not df_elenco.empty else []
-                # Punição visual na lista
+                # Identifica punidos
                 punidos_nomes = df_elenco[df_elenco['punicao'] == 'Sim']['nome'].tolist()
-                
-                # Custom format para mostrar quem está punido na seleção
-                # Infelizmente multiselect não aceita format_func complexo nos values, 
-                # mas vamos mostrar o aviso abaixo.
                 
                 mens = st.multiselect("Presença (Mensalistas):", nomes, key="t1_m")
                 
@@ -268,14 +264,48 @@ if user_role == "admin":
             
             if res_data['reservas']:
                 st.divider(); st.warning("⏱️ **Reservas / Próximos:**")
-                tv, tp = res_data['verde'], res_data['preto']
+                
+                # --- LOGICA DE SUBSTITUIÇÃO COM PRIORIDADE PARA PUNIDOS ---
+                
+                # 1. Cria lista completa dos titulares
+                time_verde = res_data['verde']
+                time_preto = res_data['preto']
+                
+                # 2. Cria fila de saída: Primeiro os PUNIDOS, depois os NORMAIS (alternados)
+                fila_saida = []
+                
+                # Acha punidos em campo
+                punidos_em_campo = []
+                for p in time_verde:
+                    if p.replace(" (D)", "") in punidos_nomes: punidos_em_campo.append({"nome": p, "time": "🟢"})
+                for p in time_preto:
+                    if p.replace(" (D)", "") in punidos_nomes: punidos_em_campo.append({"nome": p, "time": "⚫"})
+                
+                # Acha normais em campo (na ordem alternada Verde1, Preto1, Verde2...)
+                normais_em_campo = []
+                max_len = max(len(time_verde), len(time_preto))
+                for i in range(max_len):
+                    if i < len(time_verde):
+                        nome = time_verde[i]
+                        if nome.replace(" (D)", "") not in punidos_nomes:
+                            normais_em_campo.append({"nome": nome, "time": "🟢"})
+                    if i < len(time_preto):
+                        nome = time_preto[i]
+                        if nome.replace(" (D)", "") not in punidos_nomes:
+                            normais_em_campo.append({"nome": nome, "time": "⚫"})
+                
+                # Fila Final: Punidos primeiro, depois o resto
+                fila_saida = punidos_em_campo + normais_em_campo
+                
+                # 3. Exibe a sugestão
                 for i, r in enumerate(res_data['reservas']):
-                    if i % 2 == 0: 
-                        idx = (i // 2) % len(tv)
-                        st.markdown(f"**{i+1}º {r}** <span style='color: #e67e22;'> 🔄 (Lugar de: {tv[idx]} 🟢)</span>", unsafe_allow_html=True)
-                    else: 
-                        idx = (i // 2) % len(tp)
-                        st.markdown(f"**{i+1}º {r}** <span style='color: #e67e22;'> 🔄 (Lugar de: {tp[idx]} ⚫)</span>", unsafe_allow_html=True)
+                    msg_saida = "..."
+                    if i < len(fila_saida):
+                        sai = fila_saida[i]
+                        motivo = " 🟥 (PUNIÇÃO)" if sai in punidos_em_campo else ""
+                        msg_saida = f"{sai['nome']} {sai['time']}{motivo}"
+                    
+                    st.markdown(f"**{i+1}º {r}** <span style='color: #e67e22;'> 🔄 (Entra no lugar de: {msg_saida})</span>", unsafe_allow_html=True)
             
             st.divider()
             if st.button("📂 CARREGAR ESTES TIMES NA SÚMULA", type="secondary", use_container_width=True):
@@ -291,19 +321,17 @@ if user_role == "admin":
                 st.session_state['import_sumula_diar'] = d_sum
                 st.success("✅ Enviado para a Súmula!")
 
-# === ABA 2: SÚMULA (GOLS DINÂMICOS + PUNIÇÃO AUTOMÁTICA) ===
+# === ABA 2: SÚMULA ===
 if user_role == "admin":
     with tab2:
         st.header("Súmula")
-        
-        # Para que o input de gols apareça NA HORA, não podemos usar form aqui.
-        # Precisamos de interatividade imediata.
         
         mens_list = sorted(df_elenco['nome'].astype(str).tolist()) if not df_elenco.empty else []
         def_mens = st.session_state.get('import_sumula_mens', [])
         def_mens = [x for x in def_mens if x in mens_list]
         def_diar = "\n".join(st.session_state.get('import_sumula_diar', []))
         
+        # Para input de gols funcionar na hora, nao usamos form aqui
         dt = st.date_input("Data do Jogo:", datetime.today())
         
         c1, c2 = st.columns(2)
@@ -325,7 +353,6 @@ if user_role == "admin":
             gm = {}; score_verde = 0; score_preto = 0
             
             if lf:
-                # Multiselect fora do form permite aparecer as caixas instantaneamente
                 qg = st.multiselect("Quem fez gol?", lf)
                 if qg:
                     cols = st.columns(3)
@@ -342,7 +369,6 @@ if user_role == "admin":
         
         st.divider()
         if st.button("💾 SALVAR SÚMULA E APLICAR PUNIÇÕES", type="primary", use_container_width=True):
-            # 1. Salva o Jogo
             hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
             gid = int(datetime.now().timestamp())
             nv = []
@@ -352,14 +378,9 @@ if user_role == "admin":
             if save_data(pd.concat([hist, pd.DataFrame(nv)]), "jogos"):
                 st.toast("Súmula Salva!", icon="✅")
                 
-                # 2. Lógica de Punição Automática
-                # Quem é mensalista, NÃO jogou e NÃO justificou = Punição SIM
-                # Quem jogou = Punição NÃO (Limpa a ficha)
-                
-                df_elenco_atual = carregar_elenco() # Recarrega pra garantir
+                # Punição Automática
+                df_elenco_atual = carregar_elenco()
                 alterou_elenco = False
-                
-                # Lista de faltosos sem justificativa
                 faltosos = [p for p in mens_list if p not in jog and p not in just]
                 
                 for i, row in df_elenco_atual.iterrows():
@@ -369,20 +390,15 @@ if user_role == "admin":
                             df_elenco_atual.at[i, 'punicao'] = "Sim"
                             alterou_elenco = True
                     elif nome in jog:
-                        # Se jogou, limpa a punição anterior (cumpriu ou veio)
                         if row['punicao'] != "Não":
                             df_elenco_atual.at[i, 'punicao'] = "Não"
                             alterou_elenco = True
                 
                 if alterou_elenco:
                     save_data(df_elenco_atual, "elenco")
-                    if faltosos:
-                        st.error(f"🚨 Punição aplicada automaticamente para: {', '.join(faltosos)}")
-                    else:
-                        st.info("✅ Cadastro de punições atualizado.")
+                    if faltosos: st.error(f"🚨 Punição aplicada para: {', '.join(faltosos)}")
                 
                 st.session_state['ultimo_placar_dados'] = (score_verde, score_preto, gm, str(dt))
-                # Limpa imports
                 if 'import_sumula_mens' in st.session_state: del st.session_state['import_sumula_mens']
                 if 'import_sumula_diar' in st.session_state: del st.session_state['import_sumula_diar']
 
