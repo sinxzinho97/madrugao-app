@@ -9,73 +9,141 @@ import io
 import os
 import time
 
-# --- CONFIGURAÇÕES ---
+# --- CONFIGURAÇÕES DE PÁGINA ---
 icone_aba = "logo.png" if os.path.exists("logo.png") else "🦉"
-st.set_page_config(page_title="Pelada Madrugão", page_icon=icone_aba, layout="wide")
+st.set_page_config(
+    page_title="Pelada Madrugão", 
+    page_icon=icone_aba, 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- CSS PERSONALIZADO (VISUAL ZEBRA & CAIXAS) ---
+# --- CSS PROFISSIONAL (DARK MODE & MODERN UI) ---
 st.markdown("""
     <style>
-    /* Estilo para listas zebradas */
-    .zebra-row:nth-child(even) {
-        background-color: rgba(0, 0, 0, 0.05);
-        border-radius: 5px;
+    /* Importação de Fonte Moderna */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
     }
-    .zebra-row:nth-child(odd) {
-        background-color: rgba(255, 255, 255, 0.1);
-        border-radius: 5px;
+
+    /* Esconder Menu Streamlit Padrão */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* Background e Container Principal */
+    .stApp {
+        background-color: #0E1117;
     }
+    
+    /* Estilização das Abas (Tabs) */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+        background-color: #161B22;
+        padding: 10px 15px;
+        border-radius: 12px;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        height: 45px;
+        background-color: transparent;
+        border-radius: 8px;
+        color: #8B949E;
+        border: none;
+        font-weight: 600;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background-color: #238636 !important;
+        color: white !important;
+    }
+
+    /* Container de Lista Profissional (Player Card) */
     .zebra-row {
-        padding: 6px 12px;
-        margin-bottom: 2px;
-        font-size: 15px;
+        padding: 12px 18px;
+        margin-bottom: 8px;
+        border-radius: 10px;
+        background: #161B22;
+        border-left: 4px solid transparent;
+        transition: 0.3s;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .zebra-row:hover {
+        transform: translateX(5px);
+        background: #1C2128;
     }
     
-    /* Caixas Temáticas */
-    .box-padrao {
-        padding: 15px;
+    /* Variantes de Borda por Time/Status */
+    .box-verde { border-left-color: #238636; }
+    .box-preto { border-left-color: #F0F6FC; } /* Branco para contraste no escuro */
+    .box-ouro { border-left-color: #D29922; }
+    .box-azul { border-left-color: #1F6FEB; }
+    .box-vermelho { border-left-color: #F85149; }
+
+    /* Estilo dos Botões */
+    .stButton>button {
+        width: 100%;
         border-radius: 8px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: 0.3s;
+    }
+    
+    /* Títulos e Destaques */
+    .main-title {
+        font-size: 2.5rem;
+        font-weight: 800;
+        background: -webkit-linear-gradient(#238636, #42b883);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         margin-bottom: 20px;
     }
-    .box-verde {
-        border-left: 6px solid #2e7d32;
-        background-color: rgba(46, 125, 50, 0.1);
-    }
-    .box-preto {
-        border-left: 6px solid #212121;
-        background-color: rgba(33, 33, 33, 0.1);
-    }
-    .box-ouro {
-        border-left: 6px solid #fbc02d;
-        background-color: rgba(251, 192, 45, 0.1);
-    }
-    .box-azul {
-        border-left: 6px solid #1565c0;
-        background-color: rgba(21, 101, 192, 0.1);
+    
+    .stat-card {
+        background: #161B22;
+        padding: 20px;
+        border-radius: 15px;
+        text-align: center;
+        border: 1px solid #30363D;
     }
     
     .destaque-titulo {
-        font-weight: bold;
-        font-size: 18px;
+        color: #8B949E;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
         margin-bottom: 10px;
         display: block;
-        text-transform: uppercase;
+    }
+    
+    .destaque-valor {
+        color: white;
+        font-size: 2rem;
+        font-weight: 800;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÃO AUXILIAR PARA GERAR HTML LISTA ---
-def render_html_list(titulo, items, cor_classe="box-padrao", cor_titulo="#333"):
-    html = f"<div class='box-padrao {cor_classe}'><span class='destaque-titulo' style='color:{cor_titulo}'>{titulo}</span>"
+# --- FUNÇÃO DE RENDERIZAÇÃO ATUALIZADA ---
+def render_html_list(titulo, items, cor_classe="box-padrao", cor_titulo="#FFF"):
+    st.markdown(f"<h3 style='color:{cor_titulo}; font-size: 1.2rem; margin-bottom:15px;'>{titulo}</h3>", unsafe_allow_html=True)
+    html = "<div style='margin-bottom: 30px;'>"
     for item in items:
         if isinstance(item, tuple):
             texto, valor = item
-            html += f"<div class='zebra-row'><span>{texto}</span> <span style='font-weight:bold'>{valor}</span></div>"
+            html += f"""
+            <div class='zebra-row {cor_classe}'>
+                <span style='color:#C9D1D9'>{texto}</span>
+                <span style='color:white; font-weight:bold; background:#30363D; padding: 2px 8px; border-radius:5px;'>{valor}</span>
+            </div>"""
         else:
-            html += f"<div class='zebra-row'>{item}</div>"
+            html += f"<div class='zebra-row {cor_classe}'><span style='color:#C9D1D9'>{item}</span></div>"
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
@@ -84,11 +152,15 @@ with st.sidebar:
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
     else:
-        st.write("")
-    st.title("🔒 Acesso")
+        # Espaço vazio se não tiver logo
+        st.markdown("<div style='height: 50px;'></div>", unsafe_allow_html=True)
+    
+    st.markdown("### 🔒 Área Restrita")
 
-# --- TÍTULO ---
-st.title("Pelada Madrugão 🦉 💚 🖤")
+# --- HEADER CUSTOMIZADO ---
+c_title, c_logo = st.columns([4, 1])
+with c_title:
+    st.markdown("<h1 class='main-title'>Pelada Madrugão 🦉</h1>", unsafe_allow_html=True)
 
 # --- CONEXÃO INTELIGENTE (CACHE) ---
 @st.cache_resource
@@ -151,8 +223,9 @@ def save_data(df, sheet_name):
         st.error(f"Erro ao salvar ({sheet_name}): {e}")
         return False
 
-# --- FUNÇÕES VISUAIS ---
+# --- FUNÇÕES VISUAIS DE GERAÇÃO DE IMAGEM ---
 def gerar_imagem_bonita(df, titulo="Relatório"):
+    # Adaptação para cores do novo tema ao gerar imagem
     cor_cabecalho = '#1b5e20' 
     cor_texto_cabecalho = 'white'
     cor_linha_par = '#f1f8e9' 
@@ -269,9 +342,9 @@ if user_role == "admin":
             
             if st.session_state.temp_diaristas:
                 st.caption("Lista de Diaristas:")
-                # Visual zebrado para diaristas
-                lista_diaristas_html = [f"{i+1}. {d}" for i, d in enumerate(st.session_state.temp_diaristas)]
-                render_html_list("Diaristas Adicionados", lista_diaristas_html, "box-azul", "#1565c0")
+                # Exibição zebrada
+                lista_dia = [f"{i+1}. {d}" for i, d in enumerate(st.session_state.temp_diaristas)]
+                render_html_list("Diaristas", lista_dia, "box-azul", "#1F6FEB")
                 
                 if st.button("Limpar Lista"):
                     st.session_state.temp_diaristas = []; st.rerun()
@@ -285,7 +358,8 @@ if user_role == "admin":
                 mens = st.multiselect("Presença (Selecione na ORDEM DE CHEGADA):", nomes, key="t1_m")
                 
                 if mens:
-                    st.caption(f"🏁 Selecionados: {len(mens)}")
+                    ordem_texto = ", ".join([f"{i+1}. {n}" for i, n in enumerate(mens)])
+                    st.caption(f"🏁 **Ordem Atual:** {ordem_texto}")
                 
                 if punidos_nomes:
                     st.error(f"⚠️ Punições Pendentes: {', '.join(punidos_nomes)}")
@@ -324,11 +398,11 @@ if user_role == "admin":
             def formatar_jogador(nome):
                 clean = nome.replace(" (D)", "")
                 ordem = st.session_state.mapa_chegada.get(clean, "?")
-                prefixo = f"<b>{ordem}º</b> "
+                prefixo = f"<b style='color:#8B949E'>{ordem}º</b> "
                 status = ""
                 if clean in punidos_nomes:
-                    if len(res_data['reservas']) > 0: status = " <span style='color:red; font-weight:bold'>🟥 (Sai)</span>"
-                    else: status = " <span style='color:#e67e22; font-weight:bold'>⚠️ (Joga)</span>"
+                    if len(res_data['reservas']) > 0: status = " <span style='color:#F85149; font-weight:bold'>🟥 (Sai)</span>"
+                    else: status = " <span style='color:#D29922; font-weight:bold'>⚠️ (Joga)</span>"
                 return f"{prefixo}{nome}{status}"
 
             ca, cb = st.columns(2)
@@ -339,7 +413,7 @@ if user_role == "admin":
 
             with cb:
                 lista_preto = [formatar_jogador(x) for x in res_data['preto']]
-                render_html_list(f"PRETO ({len(res_data['preto'])})", lista_preto, "box-preto", "#212121")
+                render_html_list(f"PRETO ({len(res_data['preto'])})", lista_preto, "box-preto", "#F0F6FC")
             
             if res_data['reservas']:
                 st.divider()
@@ -350,7 +424,7 @@ if user_role == "admin":
                     for i, r in enumerate(res_data['reservas']):
                         ordem_reserva = st.session_state.mapa_chegada.get(r.replace(" (D)", ""), "?")
                         lista_res.append((f"<b>{i+1}.</b> {r}", f"Chegada: {ordem_reserva}º"))
-                    render_html_list("⏱️ Reservas (Fila)", lista_res, "box-ouro", "#fbc02d")
+                    render_html_list("⏱️ Reservas (Fila)", lista_res, "box-ouro", "#D29922")
                 
                 with col_sai:
                     titulares_todos = res_data['verde'] + res_data['preto']
@@ -368,10 +442,10 @@ if user_role == "admin":
                     lista_sai_fmt = []
                     for k in range(min(qtd_reservas, len(lista_saida_objs))):
                         alvo = lista_saida_objs[k]
-                        motivo = "<b style='color:red'>🟥 PUNIÇÃO</b>" if alvo['punido'] else f"Chegada Nº {alvo['num']}"
+                        motivo = "<b style='color:#F85149'>🟥 PUNIÇÃO</b>" if alvo['punido'] else f"Chegada Nº {alvo['num']}"
                         lista_sai_fmt.append((f"<b>{k+1}. {alvo['nome']}</b> {alvo['icon']}", motivo))
                     
-                    render_html_list("🚨 Sugestão de Saída", lista_sai_fmt, "box-padrao", "#d32f2f")
+                    render_html_list("🚨 Sugestão de Saída", lista_sai_fmt, "box-vermelho", "#F85149")
 
             st.divider()
             if st.button("📂 CARREGAR ESTES TIMES NA SÚMULA", type="secondary", use_container_width=True):
@@ -488,7 +562,7 @@ if user_role == "admin":
             with c_res_v:
                 render_html_list(f"VERDE: {sv}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Verde' if not df_elenco[df_elenco['nome']==k].empty], "box-verde", "#2e7d32")
             with c_res_p:
-                render_html_list(f"PRETO: {sp}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Preto' if not df_elenco[df_elenco['nome']==k].empty], "box-preto", "#212121")
+                render_html_list(f"PRETO: {sp}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Preto' if not df_elenco[df_elenco['nome']==k].empty], "box-preto", "#F0F6FC")
 
             st.divider()
             img_card = gerar_card_jogo(sdt, sv, sp, sgm, df_elenco)
@@ -525,7 +599,7 @@ if user_role == "admin":
             render_html_list("ELENCO VERDE", sorted(verde_list), "box-verde", "#2e7d32")
         with cp:
             preto_list = df_elenco[df_elenco['time'] == 'Preto']['nome'].tolist()
-            render_html_list("ELENCO PRETO", sorted(preto_list), "box-preto", "#212121")
+            render_html_list("ELENCO PRETO", sorted(preto_list), "box-preto", "#F0F6FC")
 
         st.divider()
         c1, c2 = st.columns(2)
@@ -575,6 +649,7 @@ with tab4:
     mes_atual = meses_map[hoje.month]
     pagos_count = df_checks[df_checks[mes_atual] == True].shape[0]
     total_atletas = df_checks.shape[0]
+    pendentes_count = df_checks[df_checks[mes_atual] == False].shape[0]
     
     c_f1, c_f2 = st.columns(2)
     c_f1.info(f"Mês Atual ({mes_atual}): {pagos_count} pagos de {total_atletas}")
@@ -589,23 +664,22 @@ with tab4:
             edited_checks = st.data_editor(df_checks, use_container_width=True, hide_index=True, key="editor_fin")
             if st.form_submit_button("💾 SALVAR LISTA (CONFIRMAR)"):
                 save_data(edited_checks, "financeiro"); st.success("Atualizado!"); st.rerun()
+    
+    # VISUALIZAÇÃO PARA VISITANTES (SÓ QUANTIDADE)
     else:
-        # VISUALIZAÇÃO APENAS QUANTIDADE PARA VISITANTES
-        pendentes_count = df_checks[df_checks[mes_atual] == False].shape[0]
-        
         c1, c2 = st.columns(2)
         with c1:
             st.markdown(f"""
-            <div class='box-padrao box-verde' style='text-align:center;'>
-                <span class='destaque-titulo' style='color:#2e7d32'>✅ PAGOS</span>
-                <span style='font-size: 30px; font-weight: bold;'>{pagos_count}</span>
+            <div class='stat-card' style='border-left: 5px solid #2e7d32;'>
+                <span class='destaque-titulo' style='color:#2e7d32'>✅ JÁ PAGARAM</span>
+                <span class='destaque-valor'>{pagos_count}</span>
             </div>
             """, unsafe_allow_html=True)
         with c2:
             st.markdown(f"""
-            <div class='box-padrao box-preto' style='text-align:center;'>
+            <div class='stat-card' style='border-left: 5px solid #d32f2f;'>
                 <span class='destaque-titulo' style='color:#d32f2f'>🕒 PENDENTES</span>
-                <span style='font-size: 30px; font-weight: bold;'>{pendentes_count}</span>
+                <span class='destaque-valor'>{pendentes_count}</span>
             </div>
             """, unsafe_allow_html=True)
 
@@ -679,7 +753,7 @@ with tab5:
     else:
         st.info("ℹ️ Detalhes restritos à administração.")
 
-# === ABA 6: ESTATÍSTICAS (VISUAL ZEBRADO) ===
+# === ABA 6: ESTATÍSTICAS ===
 with tab6:
     st.header("📊 Estatísticas")
     hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
