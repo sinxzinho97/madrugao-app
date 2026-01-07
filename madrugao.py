@@ -13,6 +13,45 @@ import time
 icone_aba = "logo.png" if os.path.exists("logo.png") else "🦉"
 st.set_page_config(page_title="Pelada Madrugão", page_icon=icone_aba, layout="wide")
 
+# --- CSS PERSONALIZADO (VISUAL ZEBRA) ---
+st.markdown("""
+    <style>
+    /* Estilo para listas zebradas (Um escuro, um claro) */
+    .zebra-row:nth-child(even) {
+        background-color: rgba(0, 0, 0, 0.05); /* Cinza bem clarinho */
+        border-radius: 5px;
+    }
+    .zebra-row:nth-child(odd) {
+        background-color: rgba(255, 255, 255, 0.1); /* Transparente/Branco */
+        border-radius: 5px;
+    }
+    .zebra-row {
+        padding: 5px 10px;
+        margin-bottom: 2px;
+        font-size: 16px;
+    }
+    /* Caixas dos Times */
+    .team-box-verde {
+        border-left: 6px solid #2e7d32;
+        background-color: rgba(46, 125, 50, 0.1);
+        padding: 15px;
+        border-radius: 8px;
+    }
+    .team-box-preto {
+        border-left: 6px solid #212121;
+        background-color: rgba(33, 33, 33, 0.1);
+        padding: 15px;
+        border-radius: 8px;
+    }
+    .destaque-titulo {
+        font-weight: bold;
+        font-size: 20px;
+        margin-bottom: 10px;
+        display: block;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- BARRA LATERAL ---
 with st.sidebar:
     if os.path.exists("logo.png"):
@@ -254,70 +293,73 @@ if user_role == "admin":
             res_data = st.session_state.resultado_sorteio
             st.divider()
             
+            # --- RENDERIZAÇÃO VISUAL COM HTML (ZEBRA) ---
+            
             def formatar_jogador(nome):
                 clean = nome.replace(" (D)", "")
                 ordem = st.session_state.mapa_chegada.get(clean, "?")
-                prefixo = f"**{ordem}º** "
+                prefixo = f"<b>{ordem}º</b> "
                 status = ""
                 if clean in punidos_nomes:
-                    if len(res_data['reservas']) > 0: status = " 🟥 (Sai)"
-                    else: status = " ⚠️ (Joga)"
+                    if len(res_data['reservas']) > 0: status = " <span style='color:red; font-weight:bold'>🟥 (Sai)</span>"
+                    else: status = " <span style='color:#e67e22; font-weight:bold'>⚠️ (Joga)</span>"
                 return f"{prefixo}{nome}{status}"
 
             ca, cb = st.columns(2)
+            
+            # Coluna Verde (Com Estilo)
             with ca:
-                st.success(f"VERDE ({len(res_data['verde'])})")
-                for x in res_data['verde']: st.write(f"- {formatar_jogador(x)}")
+                html_verde = "<div class='team-box-verde'><span class='destaque-titulo' style='color:#2e7d32'>VERDE</span>"
+                for i, x in enumerate(res_data['verde']):
+                    html_verde += f"<div class='zebra-row'>{formatar_jogador(x)}</div>"
+                html_verde += f"<div style='margin-top:10px; font-weight:bold; color:#2e7d32'>Total: {len(res_data['verde'])}</div></div>"
+                st.markdown(html_verde, unsafe_allow_html=True)
+
+            # Coluna Preto (Com Estilo)
             with cb:
-                st.error(f"PRETO ({len(res_data['preto'])})")
-                for x in res_data['preto']: st.write(f"- {formatar_jogador(x)}")
+                html_preto = "<div class='team-box-preto'><span class='destaque-titulo' style='color:#212121'>PRETO</span>"
+                for i, x in enumerate(res_data['preto']):
+                    html_preto += f"<div class='zebra-row'>{formatar_jogador(x)}</div>"
+                html_preto += f"<div style='margin-top:10px; font-weight:bold; color:#212121'>Total: {len(res_data['preto'])}</div></div>"
+                st.markdown(html_preto, unsafe_allow_html=True)
             
             if res_data['reservas']:
                 st.divider()
                 
-                # --- VISÃO: QUEM ESPERA & QUEM SAI (v56.0) ---
-                
                 col_res, col_sai = st.columns(2)
                 
-                # COLUNA 1: BANCO DE RESERVAS
+                # COLUNA 1: RESERVAS (ZEBRA)
                 with col_res:
                     st.warning("⏱️ Reservas (Fila de Entrada):")
+                    html_res = "<div>"
                     for i, r in enumerate(res_data['reservas']):
                         ordem_reserva = st.session_state.mapa_chegada.get(r.replace(" (D)", ""), "?")
-                        st.write(f"**{i+1}.** {r} (Chegada: {ordem_reserva}º)")
+                        html_res += f"<div class='zebra-row'><b>{i+1}.</b> {r} (Chegada: {ordem_reserva}º)</div>"
+                    html_res += "</div>"
+                    st.markdown(html_res, unsafe_allow_html=True)
                 
-                # COLUNA 2: CANDIDATOS A SAIR
+                # COLUNA 2: QUEM SAI (ZEBRA)
                 with col_sai:
-                    st.error("🚨 Sugestão de Saída (Quem deve sair):")
-                    st.caption("Critério: Punição > Últimos a Chegar")
-                    
+                    st.error("🚨 Sugestão de Saída:")
                     titulares_todos = res_data['verde'] + res_data['preto']
-                    
-                    # Cria lista de objetos para ordenar
                     lista_saida = []
                     for p in titulares_todos:
                         clean = p.replace(" (D)", "")
                         num_chegada = st.session_state.mapa_chegada.get(clean, 0)
                         is_punido = clean in punidos_nomes
                         time_icon = "🟢" if p in res_data['verde'] else "⚫"
-                        
-                        lista_saida.append({
-                            "nome": p,
-                            "num": num_chegada,
-                            "punido": is_punido,
-                            "time_icon": time_icon
-                        })
+                        lista_saida.append({"nome": p, "num": num_chegada, "punido": is_punido, "icon": time_icon})
                     
-                    # ORDENAÇÃO: Punidos Primeiro, Depois quem tem numero maior (chegou por ultimo)
                     lista_saida.sort(key=lambda x: (x['punido'], x['num']), reverse=True)
-                    
-                    # Mostra apenas a quantidade necessária (igual ao numero de reservas)
                     qtd_reservas = len(res_data['reservas'])
                     
+                    html_sai = "<div>"
                     for k in range(min(qtd_reservas, len(lista_saida))):
                         alvo = lista_saida[k]
-                        motivo = "🟥 PUNIÇÃO" if alvo['punido'] else f"Chegada Nº {alvo['num']}"
-                        st.markdown(f"**{k+1}. {alvo['nome']}** {alvo['time_icon']} - ({motivo})")
+                        motivo = "<b>🟥 PUNIÇÃO</b>" if alvo['punido'] else f"Chegada Nº {alvo['num']}"
+                        html_sai += f"<div class='zebra-row'><b>{k+1}. {alvo['nome']}</b> {alvo['icon']} - ({motivo})</div>"
+                    html_sai += "</div>"
+                    st.markdown(html_sai, unsafe_allow_html=True)
 
             st.divider()
             if st.button("📂 CARREGAR ESTES TIMES NA SÚMULA", type="secondary", use_container_width=True):
