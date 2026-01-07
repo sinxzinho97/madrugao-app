@@ -210,13 +210,13 @@ if user_role == "admin":
             st.subheader("2. Mensalistas & Sorteio")
             with st.form("form_sorteio_geral"):
                 nomes = sorted(df_elenco['nome'].astype(str).tolist()) if not df_elenco.empty else []
-                # Identifica punidos
+                # Punição
                 punidos_nomes = df_elenco[df_elenco['punicao'] == 'Sim']['nome'].tolist()
                 
                 mens = st.multiselect("Presença (Mensalistas):", nomes, key="t1_m")
                 
                 if punidos_nomes:
-                    st.caption(f"⚠️ Jogadores com Punição Pendente: {', '.join(punidos_nomes)}")
+                    st.caption(f"⚠️ Punições Pendentes: {', '.join(punidos_nomes)}")
 
                 st.write("")
                 submitted = st.form_submit_button("🎲 REALIZAR SORTEIO", type="primary")
@@ -246,12 +246,12 @@ if user_role == "admin":
             res_data = st.session_state.resultado_sorteio
             st.divider()
             
-            # Formatação de Punição
+            # Formatação Visual dos Titulares
             def formatar_jogador(nome):
                 clean = nome.replace(" (D)", "")
                 if clean in punidos_nomes:
-                    if len(res_data['reservas']) > 0: return f"{nome} 🟥 (Sai no Intervalo)"
-                    else: return f"{nome} ⚠️ (Sem reservas, joga)"
+                    if len(res_data['reservas']) > 0: return f"{nome} 🟥 (Sai)"
+                    else: return f"{nome} ⚠️ (Joga)"
                 return nome
 
             ca, cb = st.columns(2)
@@ -263,49 +263,54 @@ if user_role == "admin":
                 for x in res_data['preto']: st.write(f"- {formatar_jogador(x)}")
             
             if res_data['reservas']:
-                st.divider(); st.warning("⏱️ **Reservas / Próximos:**")
+                st.divider(); st.warning("⏱️ **Reservas / Substituições (Ordem de Chegada):**")
                 
-                # --- LOGICA DE SUBSTITUIÇÃO COM PRIORIDADE PARA PUNIDOS ---
+                # --- ALGORITMO ROTAÇÃO IMPLACÁVEL (v52.0) ---
+                # A prioridade é tirar quem tem que sair (Punido -> Rotação), independente de quem entra.
                 
-                # 1. Cria lista completa dos titulares
+                # 1. Monta Fila de Saída (Quem sai primeiro?)
                 time_verde = res_data['verde']
                 time_preto = res_data['preto']
                 
-                # 2. Cria fila de saída: Primeiro os PUNIDOS, depois os NORMAIS (alternados)
                 fila_saida = []
                 
-                # Acha punidos em campo
-                punidos_em_campo = []
+                # A. Prioridade 1: Punidos (Verde e Preto)
                 for p in time_verde:
-                    if p.replace(" (D)", "") in punidos_nomes: punidos_em_campo.append({"nome": p, "time": "🟢"})
+                    if p.replace(" (D)", "") in punidos_nomes: fila_saida.append({"nome": p, "time": "Verde", "icon": "🟢", "punido": True})
                 for p in time_preto:
-                    if p.replace(" (D)", "") in punidos_nomes: punidos_em_campo.append({"nome": p, "time": "⚫"})
+                    if p.replace(" (D)", "") in punidos_nomes: fila_saida.append({"nome": p, "time": "Preto", "icon": "⚫", "punido": True})
                 
-                # Acha normais em campo (na ordem alternada Verde1, Preto1, Verde2...)
-                normais_em_campo = []
-                max_len = max(len(time_verde), len(time_preto))
+                # B. Prioridade 2: Rotação Normal (Alternada 1 Verde, 1 Preto, etc)
+                # Cria listas de não-punidos
+                normal_verde = [p for p in time_verde if p.replace(" (D)", "") not in punidos_nomes]
+                normal_preto = [p for p in time_preto if p.replace(" (D)", "") not in punidos_nomes]
+                
+                max_len = max(len(normal_verde), len(normal_preto))
                 for i in range(max_len):
-                    if i < len(time_verde):
-                        nome = time_verde[i]
-                        if nome.replace(" (D)", "") not in punidos_nomes:
-                            normais_em_campo.append({"nome": nome, "time": "🟢"})
-                    if i < len(time_preto):
-                        nome = time_preto[i]
-                        if nome.replace(" (D)", "") not in punidos_nomes:
-                            normais_em_campo.append({"nome": nome, "time": "⚫"})
+                    if i < len(normal_verde): fila_saida.append({"nome": normal_verde[i], "time": "Verde", "icon": "🟢", "punido": False})
+                    if i < len(normal_preto): fila_saida.append({"nome": normal_preto[i], "time": "Preto", "icon": "⚫", "punido": False})
                 
-                # Fila Final: Punidos primeiro, depois o resto
-                fila_saida = punidos_em_campo + normais_em_campo
-                
-                # 3. Exibe a sugestão
-                for i, r in enumerate(res_data['reservas']):
-                    msg_saida = "..."
+                # 2. Cruza Reserva com Fila de Saída
+                def get_team_pref(nome_reserva):
+                    clean = nome_reserva.replace(" (D)", "")
+                    row = df_elenco[df_elenco['nome'] == clean]
+                    if not row.empty: return row.iloc[0]['time']
+                    return "Ambos"
+
+                for i, reserva in enumerate(res_data['reservas']):
                     if i < len(fila_saida):
-                        sai = fila_saida[i]
-                        motivo = " 🟥 (PUNIÇÃO)" if sai in punidos_em_campo else ""
-                        msg_saida = f"{sai['nome']} {sai['time']}{motivo}"
-                    
-                    st.markdown(f"**{i+1}º {r}** <span style='color: #e67e22;'> 🔄 (Entra no lugar de: {msg_saida})</span>", unsafe_allow_html=True)
+                        alvo = fila_saida[i] # Quem vai sair nessa rodada de substituição
+                        
+                        # Verifica se está jogando no rival
+                        pref_reserva = get_team_pref(reserva)
+                        msg_extra = ""
+                        
+                        if alvo['punido']:
+                            msg_extra = " 🟥 (PUNIÇÃO)"
+                        elif (pref_reserva == "Verde" and alvo['time'] == "Preto") or (pref_reserva == "Preto" and alvo['time'] == "Verde"):
+                            msg_extra = " ⚠️ (Joga no Rival)"
+                        
+                        st.markdown(f"**{i+1}º {reserva}** <span style='color: #e67e22;'> 🔄 (Entra no lugar de: {alvo['nome']} {alvo['icon']}{msg_extra})</span>", unsafe_allow_html=True)
             
             st.divider()
             if st.button("📂 CARREGAR ESTES TIMES NA SÚMULA", type="secondary", use_container_width=True):
@@ -314,7 +319,7 @@ if user_role == "admin":
                 d_sum = []
                 nomes_bd = df_elenco['nome'].values.tolist()
                 for nome in todos:
-                    clean = nome.replace(" (D)", "").replace(" 🟥 (Sai no Intervalo)", "").replace(" ⚠️ (Sem reservas, joga)", "")
+                    clean = nome.replace(" (D)", "").replace(" 🟥 (Sai)", "").replace(" ⚠️ (Joga)", "")
                     if clean in nomes_bd: m_sum.append(clean)
                     else: d_sum.append(clean)
                 st.session_state['import_sumula_mens'] = m_sum
@@ -331,7 +336,6 @@ if user_role == "admin":
         def_mens = [x for x in def_mens if x in mens_list]
         def_diar = "\n".join(st.session_state.get('import_sumula_diar', []))
         
-        # Para input de gols funcionar na hora, nao usamos form aqui
         dt = st.date_input("Data do Jogo:", datetime.today())
         
         c1, c2 = st.columns(2)
@@ -378,7 +382,6 @@ if user_role == "admin":
             if save_data(pd.concat([hist, pd.DataFrame(nv)]), "jogos"):
                 st.toast("Súmula Salva!", icon="✅")
                 
-                # Punição Automática
                 df_elenco_atual = carregar_elenco()
                 alterou_elenco = False
                 faltosos = [p for p in mens_list if p not in jog and p not in just]
