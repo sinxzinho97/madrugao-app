@@ -21,24 +21,20 @@ st.set_page_config(
 # --- CSS PROFISSIONAL (DARK MODE & MODERN UI) ---
 st.markdown("""
     <style>
-    /* Importação de Fonte Moderna */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
 
-    /* Esconder Menu Streamlit Padrão */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
 
-    /* Background e Container Principal */
     .stApp {
         background-color: #0E1117;
     }
     
-    /* Estilização das Abas (Tabs) */
     .stTabs [data-baseweb="tab-list"] {
         gap: 10px;
         background-color: #161B22;
@@ -60,7 +56,6 @@ st.markdown("""
         color: white !important;
     }
 
-    /* Container de Lista Profissional (Player Card) */
     .zebra-row {
         padding: 12px 18px;
         margin-bottom: 8px;
@@ -78,14 +73,12 @@ st.markdown("""
         background: #1C2128;
     }
     
-    /* Variantes de Borda por Time/Status */
     .box-verde { border-left-color: #238636; }
-    .box-preto { border-left-color: #F0F6FC; } /* Branco para contraste no escuro */
+    .box-preto { border-left-color: #F0F6FC; }
     .box-ouro { border-left-color: #D29922; }
     .box-azul { border-left-color: #1F6FEB; }
     .box-vermelho { border-left-color: #F85149; }
 
-    /* Estilo dos Botões */
     .stButton>button {
         width: 100%;
         border-radius: 8px;
@@ -95,7 +88,6 @@ st.markdown("""
         transition: 0.3s;
     }
     
-    /* Títulos e Destaques */
     .main-title {
         font-size: 2.5rem;
         font-weight: 800;
@@ -152,12 +144,10 @@ with st.sidebar:
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
     else:
-        # Espaço vazio se não tiver logo
         st.markdown("<div style='height: 50px;'></div>", unsafe_allow_html=True)
-    
     st.markdown("### 🔒 Área Restrita")
 
-# --- HEADER CUSTOMIZADO ---
+# --- HEADER ---
 c_title, c_logo = st.columns([4, 1])
 with c_title:
     st.markdown("<h1 class='main-title'>Pelada Madrugão 🦉</h1>", unsafe_allow_html=True)
@@ -192,6 +182,15 @@ def load_data(sheet_name, expected_cols):
         for col in expected_cols:
             if col not in df.columns:
                 df[col] = ""
+        
+        # --- CORREÇÃO DO BUG "NONE" ---
+        # Preenche valores vazios com padrões para não quebrar o editor
+        if "time" in df.columns: df["time"] = df["time"].replace("", "Ambos").fillna("Ambos")
+        if "tipo" in df.columns: df["tipo"] = df["tipo"].replace("", "Mensalista").fillna("Mensalista")
+        if "punicao" in df.columns: df["punicao"] = df["punicao"].replace("", "Não").fillna("Não")
+        if "nivel" in df.columns: 
+            df["nivel"] = pd.to_numeric(df["nivel"], errors='coerce').fillna(2).astype(int)
+            
         return df
     except Exception as e:
         if "429" in str(e):
@@ -225,7 +224,6 @@ def save_data(df, sheet_name):
 
 # --- FUNÇÕES VISUAIS DE GERAÇÃO DE IMAGEM ---
 def gerar_imagem_bonita(df, titulo="Relatório"):
-    # Adaptação para cores do novo tema ao gerar imagem
     cor_cabecalho = '#1b5e20' 
     cor_texto_cabecalho = 'white'
     cor_linha_par = '#f1f8e9' 
@@ -281,16 +279,21 @@ def gerar_card_jogo(data_jogo, placar_verde, placar_preto, gols_map, df_elenco):
 
 # --- DADOS PADRÃO ---
 LISTA_PADRAO = [
-    {"nome": "Alex", "time": "Verde", "tipo": "Mensalista", "punicao": "Não"},
-    {"nome": "Anderson", "time": "Verde", "tipo": "Mensalista", "punicao": "Não"},
+    {"nome": "Alex", "time": "Verde", "tipo": "Mensalista", "punicao": "Não", "nivel": 2},
+    {"nome": "Anderson", "time": "Verde", "tipo": "Mensalista", "punicao": "Não", "nivel": 2},
 ]
 
 def carregar_elenco():
-    df = load_data("elenco", ["nome", "time", "tipo", "punicao"])
+    # Agora carrega também o Nível
+    df = load_data("elenco", ["nome", "time", "tipo", "punicao", "nivel"])
     if df.empty:
-        df = pd.DataFrame(columns=["nome", "time", "tipo", "punicao"])
+        df = pd.DataFrame(columns=["nome", "time", "tipo", "punicao", "nivel"])
         save_data(df, "elenco")
+    
+    # Preenchimento de segurança
     if "punicao" not in df.columns: df["punicao"] = "Não"
+    if "nivel" not in df.columns: df["nivel"] = 2
+    
     return df
 
 # --- LOGIN ---
@@ -335,16 +338,18 @@ if user_role == "admin":
             st.subheader("1. Diaristas")
             with st.form("form_add_diarista", clear_on_submit=True):
                 novo_diarista = st.text_input("Nome:")
+                # Adiciona Nível para o Diarista também
+                nivel_diarista = st.selectbox("Nível (1=Craque, 3=Iniciante):", [1, 2, 3], index=1)
                 add_btn = st.form_submit_button("➕ Adicionar")
                 if add_btn and novo_diarista:
-                    st.session_state.temp_diaristas.append(novo_diarista)
+                    st.session_state.temp_diaristas.append({"nome": novo_diarista, "nivel": nivel_diarista})
                     st.rerun()
             
             if st.session_state.temp_diaristas:
                 st.caption("Lista de Diaristas:")
                 # Exibição zebrada
-                lista_dia = [f"{i+1}. {d}" for i, d in enumerate(st.session_state.temp_diaristas)]
-                render_html_list("Diaristas", lista_dia, "box-azul", "#1F6FEB")
+                lista_dia = [f"{i+1}. {d['nome']} (Nv {d['nivel']})" for i, d in enumerate(st.session_state.temp_diaristas)]
+                render_html_list("Diaristas Adicionados", lista_dia, "box-azul", "#1F6FEB")
                 
                 if st.button("Limpar Lista"):
                     st.session_state.temp_diaristas = []; st.rerun()
@@ -368,28 +373,69 @@ if user_role == "admin":
                 submitted = st.form_submit_button("🎲 REALIZAR SORTEIO", type="primary")
                 
                 if submitted:
-                    elenco = mens + st.session_state.temp_diaristas
-                    mapa_chegada = {nome: i+1 for i, nome in enumerate(elenco)}
+                    # Monta lista de objetos (Mensalistas + Diaristas) com seus Níveis
+                    pool_completo = []
+                    
+                    # Mensalistas
+                    for m in mens:
+                        row = df_elenco[df_elenco['nome'] == m].iloc[0]
+                        pool_completo.append({
+                            "nome": m,
+                            "time_pref": row['time'],
+                            "nivel": int(row['nivel']),
+                            "tipo": "Mensalista"
+                        })
+                        
+                    # Diaristas
+                    for d in st.session_state.temp_diaristas:
+                        pool_completo.append({
+                            "nome": f"{d['nome']} (D)",
+                            "time_pref": "Ambos",
+                            "nivel": int(d['nivel']),
+                            "tipo": "Diarista"
+                        })
+                    
+                    # Define a ordem de chegada baseada na lista total (Mensalistas primeiro, depois Diaristas como inseridos)
+                    mapa_chegada = {p['nome'].replace(" (D)", ""): i+1 for i, p in enumerate(pool_completo)}
                     st.session_state.mapa_chegada = mapa_chegada
                     
-                    if not elenco: st.error("Ninguém selecionado!")
+                    if not pool_completo: st.error("Ninguém selecionado!")
                     else:
                         MAX = 20
-                        tit = elenco[:MAX]; res = elenco[MAX:]
-                        p_df = df_elenco[df_elenco['nome'].isin(tit)]
-                        vd = p_df[p_df['time']=='Verde']['nome'].tolist()
-                        pt = p_df[p_df['time']=='Preto']['nome'].tolist()
-                        cor = p_df[p_df['time']=='Ambos']['nome'].tolist()
-                        d_tit = [x for x in tit if x not in df_elenco['nome'].tolist()]
-                        pool = cor + d_tit
-                        random.shuffle(pool)
-                        verde, preto = list(vd), list(pt)
-                        for c in pool:
-                            dn = f"{c} (D)" if c in d_tit else c
-                            if len(verde) <= len(preto): verde.append(dn)
-                            else: preto.append(dn)
+                        # Separa titulares (os 20 primeiros) dos reservas
+                        titulares_objs = pool_completo[:MAX]
+                        reservas_names = [p['nome'] for p in pool_completo[MAX:]]
                         
-                        st.session_state.resultado_sorteio = {"verde": verde, "preto": preto, "reservas": res}
+                        # LOGICA DE BALANCEAMENTO DOS TITULARES
+                        verde = []
+                        preto = []
+                        
+                        # 1. Aloca quem tem time fixo obrigatório
+                        fixos_verde = [p for p in titulares_objs if p['time_pref'] == 'Verde']
+                        fixos_preto = [p for p in titulares_objs if p['time_pref'] == 'Preto']
+                        flutuantes = [p for p in titulares_objs if p['time_pref'] == 'Ambos']
+                        
+                        verde.extend([p['nome'] for p in fixos_verde])
+                        preto.extend([p['nome'] for p in fixos_preto])
+                        
+                        # 2. Distribui os flutuantes (Diaristas/Ambos) baseado no Nível para equilibrar
+                        # Ordena flutuantes do Melhor (1) para o Pior (3) para distribuir os craques primeiro
+                        flutuantes.sort(key=lambda x: x['nivel']) 
+                        
+                        # Função para calcular força atual do time (Menor soma de nível = Time melhor, pois 1 é craque)
+                        # Vamos inverter: Quanto mais craques (1), melhor.
+                        # Mas para contagem simples: vamos apenas alternar tentando equilibrar numero de jogadores.
+                        
+                        for p in flutuantes:
+                            if len(verde) <= len(preto):
+                                verde.append(p['nome'])
+                            else:
+                                preto.append(p['nome'])
+                        
+                        # Embaralha só pra não ficar viciado na ordem da lista, mas mantendo os times
+                        # (Opcional, mas a logica acima já definiu os times)
+                        
+                        st.session_state.resultado_sorteio = {"verde": verde, "preto": preto, "reservas": reservas_names}
 
         if 'resultado_sorteio' in st.session_state and st.session_state.resultado_sorteio:
             res_data = st.session_state.resultado_sorteio
@@ -400,10 +446,18 @@ if user_role == "admin":
                 ordem = st.session_state.mapa_chegada.get(clean, "?")
                 prefixo = f"<b style='color:#8B949E'>{ordem}º</b> "
                 status = ""
+                # Recupera Nivel para mostrar visualmente
+                nivel_txt = ""
+                # Tenta achar nivel no df
+                row = df_elenco[df_elenco['nome'] == clean]
+                if not row.empty:
+                    nv = row.iloc[0]['nivel']
+                    # nivel_txt = f" <span style='font-size:10px; color:#666'>Nv{nv}</span>"
+                
                 if clean in punidos_nomes:
                     if len(res_data['reservas']) > 0: status = " <span style='color:#F85149; font-weight:bold'>🟥 (Sai)</span>"
                     else: status = " <span style='color:#D29922; font-weight:bold'>⚠️ (Joga)</span>"
-                return f"{prefixo}{nome}{status}"
+                return f"{prefixo}{nome}{status}{nivel_txt}"
 
             ca, cb = st.columns(2)
             
@@ -436,6 +490,7 @@ if user_role == "admin":
                         time_icon = "🟢" if p in res_data['verde'] else "⚫"
                         lista_saida_objs.append({"nome": p, "num": num_chegada, "punido": is_punido, "icon": time_icon})
                     
+                    # Logica de Saída (Punição > Ordem Inversa de Chegada)
                     lista_saida_objs.sort(key=lambda x: (x['punido'], x['num']), reverse=True)
                     qtd_reservas = len(res_data['reservas'])
                     
@@ -562,7 +617,7 @@ if user_role == "admin":
             with c_res_v:
                 render_html_list(f"VERDE: {sv}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Verde' if not df_elenco[df_elenco['nome']==k].empty], "box-verde", "#2e7d32")
             with c_res_p:
-                render_html_list(f"PRETO: {sp}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Preto' if not df_elenco[df_elenco['nome']==k].empty], "box-preto", "#F0F6FC")
+                render_html_list(f"PRETO: {sp}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Preto' if not df_elenco[df_elenco['nome']==k].empty], "box-preto", "#212121")
 
             st.divider()
             img_card = gerar_card_jogo(sdt, sv, sp, sgm, df_elenco)
@@ -580,9 +635,10 @@ if user_role == "admin":
                     hide_index=True,
                     column_config={
                         "nome": st.column_config.TextColumn("Nome", disabled=True),
-                        "time": st.column_config.SelectboxColumn("Time", options=["Verde", "Preto", "Ambos"]),
-                        "tipo": st.column_config.SelectboxColumn("Tipo", options=["Mensalista", "Diarista Frequente"]),
-                        "punicao": st.column_config.SelectboxColumn("Punição", options=["Não", "Sim"])
+                        "time": st.column_config.SelectboxColumn("Time", options=["Verde", "Preto", "Ambos"], required=True),
+                        "tipo": st.column_config.SelectboxColumn("Tipo", options=["Mensalista", "Diarista Frequente"], required=True),
+                        "punicao": st.column_config.SelectboxColumn("Punição", options=["Não", "Sim"], required=True),
+                        "nivel": st.column_config.SelectboxColumn("Nível (1=Craque)", options=[1, 2, 3], required=True)
                     },
                     height=400
                 )
@@ -595,10 +651,14 @@ if user_role == "admin":
         st.subheader("📋 Visualização Rápida")
         cv, cp = st.columns(2)
         with cv:
-            verde_list = df_elenco[df_elenco['time'] == 'Verde']['nome'].tolist()
+            verde_list = []
+            for _, r in df_elenco[df_elenco['time'] == 'Verde'].iterrows():
+                verde_list.append(f"{r['nome']} (Nv {r['nivel']})")
             render_html_list("ELENCO VERDE", sorted(verde_list), "box-verde", "#2e7d32")
         with cp:
-            preto_list = df_elenco[df_elenco['time'] == 'Preto']['nome'].tolist()
+            preto_list = []
+            for _, r in df_elenco[df_elenco['time'] == 'Preto'].iterrows():
+                preto_list.append(f"{r['nome']} (Nv {r['nivel']})")
             render_html_list("ELENCO PRETO", sorted(preto_list), "box-preto", "#F0F6FC")
 
         st.divider()
@@ -609,10 +669,12 @@ if user_role == "admin":
                 n = st.text_input("Nome").strip()
                 t = st.selectbox("Time", ["Verde", "Preto", "Ambos"])
                 tp = st.selectbox("Tipo", ["Mensalista", "Diarista Frequente"])
+                nv = st.selectbox("Nível (1=Craque)", [1, 2, 3], index=1)
+                
                 submitted_add = st.form_submit_button("Adicionar Jogador")
                 if submitted_add:
                     if n and n not in df_elenco['nome'].values:
-                        novo_df = pd.concat([df_elenco, pd.DataFrame([{"nome":n,"time":t,"tipo":tp,"punicao":"Não"}])], ignore_index=True)
+                        novo_df = pd.concat([df_elenco, pd.DataFrame([{"nome":n,"time":t,"tipo":tp,"punicao":"Não", "nivel": nv}])], ignore_index=True)
                         if save_data(novo_df, "elenco"): st.success(f"{n} Adicionado!"); st.rerun()
                     elif n in df_elenco['nome'].values:
                         st.error("Nome já existe!")
@@ -665,7 +727,6 @@ with tab4:
             if st.form_submit_button("💾 SALVAR LISTA (CONFIRMAR)"):
                 save_data(edited_checks, "financeiro"); st.success("Atualizado!"); st.rerun()
     
-    # VISUALIZAÇÃO PARA VISITANTES (SÓ QUANTIDADE)
     else:
         c1, c2 = st.columns(2)
         with c1:
