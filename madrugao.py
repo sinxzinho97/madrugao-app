@@ -212,14 +212,14 @@ else:
     tab6, tab4, tab5 = st.tabs(["📊 Estatísticas", "💰 Financeiro", "🏦 Cofre"])
     tab1=tab2=tab3=tab7=st.container()
 
-# === ABA 1: SORTEIO (COM BOTÃO ADICIONAR DIARISTA) ===
+# === ABA 1: SORTEIO ===
 if user_role == "admin":
     with tab1:
         st.header("Montar Times")
         
-        # Estado temporário para a lista de diaristas
-        if 'temp_diaristas' not in st.session_state:
-            st.session_state.temp_diaristas = []
+        # Estado temporário para a lista de diaristas e resultado
+        if 'temp_diaristas' not in st.session_state: st.session_state.temp_diaristas = []
+        if 'resultado_sorteio' not in st.session_state: st.session_state.resultado_sorteio = []
 
         c1, c2 = st.columns([1, 2])
         
@@ -232,8 +232,6 @@ if user_role == "admin":
             st.markdown("---")
             st.write(" **Diaristas:**")
             
-            # --- ÁREA DE ADICIONAR DIARISTA ---
-            # Usamos um form pequeno só para adicionar o nome na lista temporária
             with st.form("form_add_diarista", clear_on_submit=True):
                 novo_diarista = st.text_input("Nome do Diarista:")
                 add_btn = st.form_submit_button("➕ Adicionar")
@@ -241,24 +239,15 @@ if user_role == "admin":
                     st.session_state.temp_diaristas.append(novo_diarista)
                     st.rerun()
             
-            # Mostra a lista e um botão para limpar se errar
             if st.session_state.temp_diaristas:
                 st.caption("Lista de Diaristas:")
-                for d in st.session_state.temp_diaristas:
-                    st.text(f"- {d}")
-                
+                for d in st.session_state.temp_diaristas: st.text(f"- {d}")
                 if st.button("Limpar Lista", key="btn_limpar_diaristas"):
                     st.session_state.temp_diaristas = []
                     st.rerun()
 
         with c2:
-            # O botão de sortear usa a lista temporária + mensalistas
             if st.button("🎲 REALIZAR SORTEIO", type="primary"):
-                st.session_state['mem_m'] = mens
-                # Salva os diaristas na memória final como uma string única se precisar recuperar depois, 
-                # ou apenas usa a lista direta.
-                
-                # Junta tudo
                 elenco = mens + st.session_state.temp_diaristas
                 
                 if not elenco: st.error("Ninguém selecionado!")
@@ -278,39 +267,76 @@ if user_role == "admin":
                         if len(verde) <= len(preto): verde.append(dn)
                         else: preto.append(dn)
                     
-                    ca, cb = st.columns(2)
-                    ca.success(f"VERDE ({len(verde)})")
-                    for x in verde: ca.write(f"- {x}")
-                    
-                    cb.error(f"PRETO ({len(preto)})")
-                    for x in preto: cb.write(f"- {x}")
-                    
-                    st.write(""); st.info("⚠️ **Nota da Diretoria:** Caso a presença por cor seja desproporcional (ex: 13 Verdes vs 7 Pretos), os ADMs farão o remanejamento manual dos atletas na hora.")
+                    # Salva o resultado no estado para exibir e para o botão de envio
+                    st.session_state.resultado_sorteio = {
+                        "verde": verde,
+                        "preto": preto,
+                        "reservas": res,
+                        "titulares_orig": tit
+                    }
 
-                    if res:
-                        st.divider(); st.write("**Reservas:**")
-                        for i, r in enumerate(res):
-                            idx = (MAX-1)-i
-                            if idx>=0: st.write(f"{MAX+i+1}º {r} entra por {tit[idx]}")
+            # EXIBE O RESULTADO DO SORTEIO (Se houver)
+            if 'resultado_sorteio' in st.session_state and st.session_state.resultado_sorteio:
+                res_data = st.session_state.resultado_sorteio
+                
+                ca, cb = st.columns(2)
+                ca.success(f"VERDE ({len(res_data['verde'])})")
+                for x in res_data['verde']: ca.write(f"- {x}")
+                
+                cb.error(f"PRETO ({len(res_data['preto'])})")
+                for x in res_data['preto']: cb.write(f"- {x}")
+                
+                if res_data['reservas']:
+                    st.divider(); st.write("**Reservas:**")
+                    for i, r in enumerate(res_data['reservas']):
+                        st.write(f"{i+1}º {r}")
+                
+                st.divider()
+                st.write("---")
+                
+                # --- O BOTÃO DE APROVAÇÃO ---
+                if st.button("📂 CARREGAR ESTES TIMES NA SÚMULA", type="secondary", use_container_width=True):
+                    # Lógica para separar quem vai pra onde na Súmula
+                    todos_no_jogo = res_data['verde'] + res_data['preto'] + res_data['reservas']
+                    
+                    mensalistas_para_sumula = []
+                    diaristas_para_sumula = []
+                    
+                    nomes_elenco = df_elenco['nome'].values.tolist()
+                    
+                    for nome in todos_no_jogo:
+                        # Limpa o (D) caso tenha sido adicionado na logica visual
+                        nome_limpo = nome.replace(" (D)", "")
+                        if nome_limpo in nomes_elenco:
+                            mensalistas_para_sumula.append(nome_limpo)
+                        else:
+                            diaristas_para_sumula.append(nome_limpo)
+                    
+                    # Salva na sessão para a aba Súmula ler
+                    st.session_state['import_sumula_mens'] = mensalistas_para_sumula
+                    st.session_state['import_sumula_diar'] = diaristas_para_sumula
+                    
+                    st.success("✅ Jogadores enviados para a Súmula! Vá para a aba 'Súmula' conferir.")
 
 # === ABA 2: SÚMULA ===
 if user_role == "admin":
     with tab2:
         st.header("Súmula")
-        # ADICIONADO KEY PARA EVITAR DUPLICATE ID
         dt = st.date_input("Data", datetime.today(), key="data_sumula")
         mens_list = sorted(df_elenco['nome'].astype(str).tolist()) if not df_elenco.empty else []
-        def_m = [x for x in st.session_state.get('mem_m', []) if x in mens_list]
         
-        # Recupera os diaristas da sessão se houver
-        def_d_list = st.session_state.get('temp_diaristas', [])
-        def_d_text = "\n".join(def_d_list)
+        # --- LÓGICA DE IMPORTAÇÃO ---
+        # Se tiver importado, usa. Se não, usa o padrão vazio.
+        default_mens = st.session_state.get('import_sumula_mens', [])
+        # Filtra para garantir que só nomes válidos entrem no multiselect
+        default_mens = [x for x in default_mens if x in mens_list]
+        
+        default_diar = "\n".join(st.session_state.get('import_sumula_diar', []))
         
         c1, c2 = st.columns(2)
         with c1:
-            jog = st.multiselect("Jogaram:", mens_list, default=def_m)
-            # Preenche automaticamente com os diaristas do sorteio
-            dtx = st.text_area("Diaristas:", value=def_d_text)
+            jog = st.multiselect("Jogaram:", mens_list, default=default_mens)
+            dtx = st.text_area("Diaristas:", value=default_diar)
             ld = [x.strip() for x in dtx.split('\n') if x.strip()]
             if not ld: ld = [x.strip() for x in dtx.split(',') if x.strip()]
         with c2: just = st.multiselect("Justificaram:", [m for m in mens_list if m not in jog])
@@ -345,6 +371,9 @@ if user_role == "admin":
             if save_data(pd.concat([hist, pd.DataFrame(nv)]), "jogos"):
                 st.toast("Súmula Salva!", icon="✅")
                 st.session_state['ultimo_placar'] = (score_verde, score_preto, gm)
+                # Limpa a importação após salvar para evitar confusão na próxima
+                if 'import_sumula_mens' in st.session_state: del st.session_state['import_sumula_mens']
+                if 'import_sumula_diar' in st.session_state: del st.session_state['import_sumula_diar']
 
         if gm:
             with c_print:
