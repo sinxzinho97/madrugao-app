@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import io
 import os
 import time
+import re
 
 # --- CONFIGURAÇÕES ---
 icone_aba = "logo.png" if os.path.exists("logo.png") else "🦉"
@@ -144,22 +145,16 @@ def gerar_card_jogo(data_jogo, placar_verde, placar_preto, gols_map, df_elenco):
 LISTA_PADRAO = [
     {"nome": "Alex", "time": "Verde", "tipo": "Mensalista", "nivel": 2, "punicao": "Não"},
     {"nome": "Anderson", "time": "Verde", "tipo": "Mensalista", "nivel": 2, "punicao": "Não"},
-    # ... (Adicionei colunas nivel e punicao por padrão)
 ]
 
 def carregar_elenco():
     df = load_data("elenco", ["nome", "time", "tipo", "nivel", "punicao"])
     if df.empty:
-        # Se vazio, cria estrutura básica
         df = pd.DataFrame(columns=["nome", "time", "tipo", "nivel", "punicao"])
-        # Você pode reinserir a LISTA_PADRAO se quiser resetar
         save_data(df, "elenco")
     
-    # Garante que colunas novas existam se a planilha for antiga
     if "nivel" not in df.columns: df["nivel"] = 2
     if "punicao" not in df.columns: df["punicao"] = "Não"
-    
-    # Garante tipos numéricos
     df["nivel"] = pd.to_numeric(df["nivel"], errors='coerce').fillna(2).astype(int)
     return df
 
@@ -198,137 +193,161 @@ else:
     t_resumo, t_estat, t_fin, t_cofre = tabs
     t_sorteio=t_sumula=t_elenco=t_ajustes=st.container()
 
-# === ABA 1: SORTEIO EQUILIBRADO E COM DIARISTAS FÁCIL ===
+# === ABA 1: SORTEIO E AUDITORIA (NOVO) ===
 if user_role == "admin":
     with t_sorteio:
-        st.header("Montar Times (Equilibrado)")
+        st.header("Montar Times & Auditoria")
         
-        # Gerenciamento de Diaristas Temporário (Session State)
         if 'lista_diaristas' not in st.session_state: st.session_state.lista_diaristas = []
+        
+        # --- AUDITORIA DE COMPROMISSO ---
+        with st.expander("📋 CHECKLIST: Colar lista do WhatsApp aqui", expanded=False):
+            st.info("Cole a lista do grupo aqui. O sistema vai avisar quem prometeu e não veio.")
+            lista_zap_texto = st.text_area("Lista do Zap:", height=150)
+        
+        st.divider()
         
         c1, c2 = st.columns([1, 1.5])
         with c1:
             st.subheader("1. Presença")
             if not df_elenco.empty:
-                # Ordena lista para seleção
                 nomes = sorted(df_elenco['nome'].astype(str).tolist())
-                # Verifica punidos para marcar visualmente (opcional)
-                mens = st.multiselect("Mensalistas (Ordem de Chegada):", nomes, key="t1_m")
-            else: mens = []
+                
+                # SELEÇÃO 1: TITULARES (LIMITADO A 20)
+                mens_titulares = st.multiselect(
+                    "G-20 (Os 20 Primeiros):", 
+                    nomes, 
+                    key="t1_titulares",
+                    max_selections=20, # TRAVA DE 20
+                    help="Selecione apenas os 20 primeiros. O sistema não deixa passar disso."
+                )
+                
+                # Remove os já selecionados da lista para os reservas
+                restante = [n for n in nomes if n not in mens_titulares]
+                
+                # SELEÇÃO 2: RESERVAS (QUEM CHEGOU DEPOIS)
+                mens_reservas = st.multiselect(
+                    "Reservas (Chegaram Depois):",
+                    restante,
+                    key="t1_reservas",
+                    help="Quem chegou depois dos 20 primeiros."
+                )
+            else: mens_titulares, mens_reservas = [], []
             
+            # --- LÓGICA DE AUDITORIA (MOSTRA ALERTA) ---
+            if lista_zap_texto:
+                # Tenta limpar a lista do zap (remove numeros ex: "1. Lucas" -> "Lucas")
+                # Lógica simples: procura o nome do elenco dentro do texto do zap
+                jogadores_presentes = mens_titulares + mens_reservas + [d['nome'] for d in st.session_state.lista_diaristas]
+                faltosos = []
+                
+                # Verifica cada nome do elenco se está na lista do zap mas não na presença
+                for nome_elenco in nomes:
+                    # Se o nome está no texto do zap E NÃO está na lista de presentes
+                    if nome_elenco.lower() in lista_zap_texto.lower() and nome_elenco not in jogadores_presentes:
+                        faltosos.append(nome_elenco)
+                
+                if faltosos:
+                    st.error(f"🚨 FALTOSOS DETECTADOS ({len(faltosos)}):")
+                    for f in faltosos: st.write(f"- {f}")
+                else:
+                    st.success("✅ Todos da lista compareceram!")
+
             st.markdown("---")
-            st.subheader("2. Adicionar Diarista")
+            st.subheader("2. Diaristas")
             with st.form("add_diarista_form", clear_on_submit=True):
-                novo_diarista = st.text_input("Nome do Diarista:")
-                nivel_diarista = st.selectbox("Nível:", [1, 2, 3], index=1, format_func=lambda x: f"Nível {x}")
-                add_btn = st.form_submit_button("➕ Adicionar")
-                if add_btn and novo_diarista:
-                    st.session_state.lista_diaristas.append({"nome": novo_diarista, "nivel": nivel_diarista})
-                    st.success(f"{novo_diarista} adicionado!")
+                novo_diarista = st.text_input("Nome:")
+                nivel_diarista = st.selectbox("Nível:", [1, 2, 3], index=1)
+                tipo_entrada = st.radio("Entra como:", ["Titular (Completar)", "Reserva (Chegou Tarde)"])
+                if st.form_submit_button("➕ Adicionar"):
+                    if novo_diarista:
+                        st.session_state.lista_diaristas.append({
+                            "nome": novo_diarista, 
+                            "nivel": nivel_diarista,
+                            "tipo": "Titular" if "Titular" in tipo_entrada else "Reserva"
+                        })
+                        st.rerun()
             
-            # Mostra lista de diaristas adicionados
             if st.session_state.lista_diaristas:
                 st.caption("Diaristas na lista:")
                 for i, d in enumerate(st.session_state.lista_diaristas):
-                    st.text(f"{i+1}. {d['nome']} (Nv {d['nivel']})")
+                    st.text(f"{d['nome']} ({d['tipo']}) - Nv {d['nivel']}")
                 if st.button("Limpar Diaristas"):
                     st.session_state.lista_diaristas = []
                     st.rerun()
 
         with c2:
             st.subheader("3. Realizar Sorteio")
-            st.info("O sistema prioriza mensalistas sem punição. Punidos vão para o fim da fila.")
+            st.info("O sorteio separa automaticamente Titulares de Reservas.")
             
             if st.button("🎲 SORTEAR TIMES", type="primary"):
-                # 1. Monta lista completa de objetos jogador
-                pool_final = []
+                # 1. Separa Pools
+                pool_titulares = []
+                pool_reservas = []
                 
-                # Mensalistas
-                for nome in mens:
-                    dados = df_elenco[df_elenco['nome'] == nome].iloc[0]
-                    pool_final.append({
-                        "nome": nome,
-                        "nivel": dados['nivel'],
-                        "punicao": dados['punicao'] == "Sim",
-                        "origem": "Mensalista"
-                    })
+                # Processa Mensalistas Titulares
+                for nome in mens_titulares:
+                    d = df_elenco[df_elenco['nome'] == nome].iloc[0]
+                    pool_titulares.append({"nome": nome, "nivel": d['nivel']})
+                    
+                # Processa Mensalistas Reservas
+                for nome in mens_reservas:
+                    d = df_elenco[df_elenco['nome'] == nome].iloc[0]
+                    pool_reservas.append({"nome": nome, "nivel": d['nivel']})
                 
-                # Diaristas
+                # Processa Diaristas
                 for d in st.session_state.lista_diaristas:
-                    pool_final.append({
-                        "nome": f"{d['nome']} (D)",
-                        "nivel": d['nivel'],
-                        "punicao": False, # Diarista não tem punição prévia assumida aqui
-                        "origem": "Diarista"
-                    })
+                    p_obj = {"nome": f"{d['nome']} (D)", "nivel": d['nivel']}
+                    if d['tipo'] == "Titular": pool_titulares.append(p_obj)
+                    else: pool_reservas.append(p_obj)
                 
-                # 2. Aplica Regra da Punição (Joga pro fim da fila)
-                sem_punicao = [p for p in pool_final if not p['punicao']]
-                com_punicao = [p for p in pool_final if p['punicao']]
+                # 2. Sorteio dos Titulares (Verde vs Preto)
+                random.shuffle(pool_titulares)
+                pool_titulares = sorted(pool_titulares, key=lambda x: x['nivel']) # Agrupa por nivel para distribuir
                 
-                # A ordem de chegada é preservada em 'sem_punicao', punidos vão pro fim
-                fila_ordenada = sem_punicao + com_punicao
-                
-                # 3. Define Titulares (Max 22 ou outro numero)
-                MAX_TITULARES = 22 # Exemplo
-                titulares = fila_ordenada[:MAX_TITULARES]
-                reservas = fila_ordenada[MAX_TITULARES:]
-                
-                # 4. Sorteio Equilibrado dos Titulares
-                # Separa por niveis para distribuir
                 verde = []
                 preto = []
                 
-                # Ordena titulares por nível (do melhor pro pior) para distribuir no "par ou impar"
-                titulares_sorted = sorted(titulares, key=lambda x: x['nivel']) # 1 é melhor que 3
-                
-                # Distribuição Snake (1 pra lá, 1 pra cá) com shuffle leve nos de mesmo nível
-                # Na verdade, melhor embaralhar dentro do mesmo nível e distribuir
-                
-                niveis = sorted(list(set([p['nivel'] for p in titulares_sorted])))
-                
-                # Zera as listas para distribuição
-                pool_v = []
-                pool_p = []
-                
+                # Algoritmo Snake para equilibrar níveis
+                niveis = sorted(list(set([p['nivel'] for p in pool_titulares])))
                 for nv in niveis:
-                    jogadores_nivel = [p for p in titulares_sorted if p['nivel'] == nv]
-                    random.shuffle(jogadores_nivel)
-                    for j in jogadores_nivel:
-                        # Tenta mandar para o time que tem menos gente ou menos soma de nivel
-                        if len(pool_v) <= len(pool_p):
-                            pool_v.append(j)
-                        else:
-                            pool_p.append(j)
+                    jogs = [p for p in pool_titulares if p['nivel'] == nv]
+                    random.shuffle(jogs)
+                    for j in jogs:
+                        if len(verde) <= len(preto): verde.append(j['nome'])
+                        else: preto.append(j['nome'])
+                
+                # 3. Sorteio dos Reservas (Apenas ordem de prioridade)
+                # Aqui simplificamos: os reservas entram na ordem de chegada (lista) ou sorteio se preferir
+                # Vamos manter a ordem que foi inserida no multiselect para respeitar a "chegada tardia"
+                # Mas embaralhamos entre Verde/Preto se forem jogar um 2º quadro?
+                # Por enquanto, lista única de espera.
+                lista_reserva_final = [p['nome'] for p in pool_reservas]
                             
-                # Salva resultado na Session
-                st.session_state['resultado_verde'] = [p['nome'] for p in pool_v]
-                st.session_state['resultado_preto'] = [p['nome'] for p in pool_p]
-                st.session_state['resultado_reservas'] = [p['nome'] for p in reservas]
+                st.session_state['resultado_verde'] = verde
+                st.session_state['resultado_preto'] = preto
+                st.session_state['resultado_reservas'] = lista_reserva_final
                 
-                # --- GERAÇÃO AUTOMÁTICA DO RESUMO ---
-                texto_resumo = f"📢 **RESUMO DA SEMANA** - {datetime.today().strftime('%d/%m')}\n\n"
-                texto_resumo += f"⚽ **Titulares ({len(titulares)}):**\n"
-                texto_resumo += ", ".join([p['nome'] for p in titulares]) + "\n\n"
+                # Texto Resumo
+                texto = f"📢 **RESUMO DA SEMANA** - {datetime.today().strftime('%d/%m')}\n\n"
+                texto += f"✅ **Titulares ({len(verde)+len(preto)}):**\n"
+                texto += f"Verde: {len(verde)} | Preto: {len(preto)}\n\n"
+                if lista_reserva_final:
+                    texto += f"bench **Reservas (2º Tempo/Próx):**\n"
+                    for r in lista_reserva_final: texto += f"- {r}\n"
+                else: texto += "🚫 Sem reservas.\n"
                 
-                if reservas:
-                    texto_resumo += f"bench **Reservas (Ordem de Entrada):**\n"
-                    for i, r in enumerate(reservas):
-                        motivo = "Punição (Falta anterior)" if r['punicao'] else "Chegada tardia"
-                        texto_resumo += f"{i+1}. {r['nome']} ({motivo})\n"
-                else:
-                    texto_resumo += "✅ Sem reservas.\n"
-                
-                if com_punicao:
-                    texto_resumo += "\n🚨 **Punidos (Foram para o fim da fila):**\n"
-                    texto_resumo += ", ".join([p['nome'] for p in com_punicao])
-                
-                # Salva o resumo numa planilha para persistir
-                df_resumo_save = pd.DataFrame([{"texto": texto_resumo}])
-                save_data(df_resumo_save, "resumo_semana")
+                if lista_zap_texto:
+                    # Recalcula faltosos para salvar no resumo
+                    jog_pres = mens_titulares + mens_reservas + [d['nome'] for d in st.session_state.lista_diaristas]
+                    falt = [n for n in nomes if n.lower() in lista_zap_texto.lower() and n not in jog_pres]
+                    if falt:
+                        texto += "\n🚨 **Faltosos (Lista Negra):**\n" + ", ".join(falt)
+
+                save_data(pd.DataFrame([{"texto": texto}]), "resumo_semana")
                 st.rerun()
 
-            # EXIBIÇÃO DO RESULTADO
+            # EXIBIÇÃO
             if 'resultado_verde' in st.session_state:
                 ca, cb = st.columns(2)
                 ca.success(f"VERDE ({len(st.session_state['resultado_verde'])})")
@@ -338,14 +357,12 @@ if user_role == "admin":
                 for x in st.session_state['resultado_preto']: cb.write(f"- {x}")
                 
                 if st.session_state.get('resultado_reservas'):
-                    st.warning("Reservas:")
-                    for r in st.session_state['resultado_reservas']: st.write(r)
+                    st.warning(f"Reservas ({len(st.session_state['resultado_reservas'])}):")
+                    for r in st.session_state['resultado_reservas']: st.write(f"⏱️ {r}")
 
 # === ABA 2: RESUMO SEMANAL (PÚBLICO) ===
 with t_resumo:
     st.header("📢 Resumo da Rodada")
-    
-    # Carrega o resumo salvo
     df_resumo = load_data("resumo_semana", ["texto"])
     texto_atual = df_resumo.iloc[0]['texto'] if not df_resumo.empty else "Nenhum resumo gerado ainda."
     
@@ -358,7 +375,7 @@ with t_resumo:
                 st.success("Resumo atualizado!")
                 st.rerun()
     else:
-        st.info("Informações oficiais da diretoria sobre a escalação e substituições.")
+        st.info("Informações oficiais da diretoria.")
         st.markdown(texto_atual)
 
 # === ABA 3: SÚMULA ===
@@ -415,7 +432,7 @@ if user_role == "admin":
                 img_card = gerar_card_jogo(str(dt), placar_v_man, placar_p_man, gm, df_elenco)
                 st.download_button("📸 Card do Jogo", img_card, f"jogo_{dt}.png", "image/png")
 
-# === ABA 4: ELENCO (COM NÍVEL 1-3) ===
+# === ABA 4: ELENCO ===
 if user_role == "admin":
     with t_elenco:
         st.header("Gerenciar Elenco")
@@ -466,8 +483,8 @@ if user_role == "admin":
                         
                         nt = st.selectbox("Time:", ["Verde","Preto","Ambos"], index=ix)
                         ntp = st.selectbox("Tipo:", ["Mensalista","Diarista Frequente"], index=ixp)
-                        nnv = st.selectbox("Nível:", [1, 2, 3], index=ixn, help="1: Melhor, 3: Iniciante")
-                        npuni = st.selectbox("⚠️ Punição (Faltou na última):", ["Não", "Sim"], index=ixpuni, help="Se SIM, vai para o final da fila no próximo sorteio.")
+                        nnv = st.selectbox("Nível:", [1, 2, 3], index=ixn)
+                        npuni = st.selectbox("⚠️ Punição (Faltou):", ["Não", "Sim"], index=ixpuni)
                         
                         c_bt1, c_bt2 = st.columns(2)
                         save_btn = c_bt1.form_submit_button("💾 SALVAR")
@@ -596,8 +613,6 @@ with t_estat:
 if user_role == "admin":
     with t_ajustes:
         st.header("Ajustes")
-        # Aqui você pode adicionar lógica para punições rápidas se quiser,
-        # mas já coloquei no Editar Elenco que é mais organizado.
         st.info("Para punir um jogador (Lista Negra), vá na aba 'Elenco', clique em Editar e mude Punição para 'Sim'.")
         
         hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
