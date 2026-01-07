@@ -184,7 +184,6 @@ def load_data(sheet_name, expected_cols):
                 df[col] = ""
         
         # --- CORREÇÃO DO BUG "NONE" ---
-        # Preenche valores vazios com padrões para não quebrar o editor
         if "time" in df.columns: df["time"] = df["time"].replace("", "Ambos").fillna("Ambos")
         if "tipo" in df.columns: df["tipo"] = df["tipo"].replace("", "Mensalista").fillna("Mensalista")
         if "punicao" in df.columns: df["punicao"] = df["punicao"].replace("", "Não").fillna("Não")
@@ -284,13 +283,11 @@ LISTA_PADRAO = [
 ]
 
 def carregar_elenco():
-    # Agora carrega também o Nível
     df = load_data("elenco", ["nome", "time", "tipo", "punicao", "nivel"])
     if df.empty:
         df = pd.DataFrame(columns=["nome", "time", "tipo", "punicao", "nivel"])
         save_data(df, "elenco")
     
-    # Preenchimento de segurança
     if "punicao" not in df.columns: df["punicao"] = "Não"
     if "nivel" not in df.columns: df["nivel"] = 2
     
@@ -338,17 +335,17 @@ if user_role == "admin":
             st.subheader("1. Diaristas")
             with st.form("form_add_diarista", clear_on_submit=True):
                 novo_diarista = st.text_input("Nome:")
-                # Adiciona Nível para o Diarista também
-                nivel_diarista = st.selectbox("Nível (1=Craque, 3=Iniciante):", [1, 2, 3], index=1)
+                # REMOVIDO: Seleção de Nível do Diarista
                 add_btn = st.form_submit_button("➕ Adicionar")
                 if add_btn and novo_diarista:
-                    st.session_state.temp_diaristas.append({"nome": novo_diarista, "nivel": nivel_diarista})
+                    # Adiciona com Nível padrão 2 (Médio)
+                    st.session_state.temp_diaristas.append({"nome": novo_diarista, "nivel": 2})
                     st.rerun()
             
             if st.session_state.temp_diaristas:
                 st.caption("Lista de Diaristas:")
-                # Exibição zebrada
-                lista_dia = [f"{i+1}. {d['nome']} (Nv {d['nivel']})" for i, d in enumerate(st.session_state.temp_diaristas)]
+                # Exibição simplificada (Sem mostrar nível)
+                lista_dia = [f"{i+1}. {d['nome']}" for i, d in enumerate(st.session_state.temp_diaristas)]
                 render_html_list("Diaristas Adicionados", lista_dia, "box-azul", "#1F6FEB")
                 
                 if st.button("Limpar Lista"):
@@ -373,7 +370,7 @@ if user_role == "admin":
                 submitted = st.form_submit_button("🎲 REALIZAR SORTEIO", type="primary")
                 
                 if submitted:
-                    # Monta lista de objetos (Mensalistas + Diaristas) com seus Níveis
+                    # Monta lista de objetos
                     pool_completo = []
                     
                     # Mensalistas
@@ -386,7 +383,7 @@ if user_role == "admin":
                             "tipo": "Mensalista"
                         })
                         
-                    # Diaristas
+                    # Diaristas (Nível 2 fixo, sem input)
                     for d in st.session_state.temp_diaristas:
                         pool_completo.append({
                             "nome": f"{d['nome']} (D)",
@@ -395,22 +392,18 @@ if user_role == "admin":
                             "tipo": "Diarista"
                         })
                     
-                    # Define a ordem de chegada baseada na lista total (Mensalistas primeiro, depois Diaristas como inseridos)
                     mapa_chegada = {p['nome'].replace(" (D)", ""): i+1 for i, p in enumerate(pool_completo)}
                     st.session_state.mapa_chegada = mapa_chegada
                     
                     if not pool_completo: st.error("Ninguém selecionado!")
                     else:
                         MAX = 20
-                        # Separa titulares (os 20 primeiros) dos reservas
                         titulares_objs = pool_completo[:MAX]
                         reservas_names = [p['nome'] for p in pool_completo[MAX:]]
                         
-                        # LOGICA DE BALANCEAMENTO DOS TITULARES
                         verde = []
                         preto = []
                         
-                        # 1. Aloca quem tem time fixo obrigatório
                         fixos_verde = [p for p in titulares_objs if p['time_pref'] == 'Verde']
                         fixos_preto = [p for p in titulares_objs if p['time_pref'] == 'Preto']
                         flutuantes = [p for p in titulares_objs if p['time_pref'] == 'Ambos']
@@ -418,22 +411,12 @@ if user_role == "admin":
                         verde.extend([p['nome'] for p in fixos_verde])
                         preto.extend([p['nome'] for p in fixos_preto])
                         
-                        # 2. Distribui os flutuantes (Diaristas/Ambos) baseado no Nível para equilibrar
-                        # Ordena flutuantes do Melhor (1) para o Pior (3) para distribuir os craques primeiro
+                        # Ordena flutuantes por Nível para balancear (mas sem mostrar o nível)
                         flutuantes.sort(key=lambda x: x['nivel']) 
                         
-                        # Função para calcular força atual do time (Menor soma de nível = Time melhor, pois 1 é craque)
-                        # Vamos inverter: Quanto mais craques (1), melhor.
-                        # Mas para contagem simples: vamos apenas alternar tentando equilibrar numero de jogadores.
-                        
                         for p in flutuantes:
-                            if len(verde) <= len(preto):
-                                verde.append(p['nome'])
-                            else:
-                                preto.append(p['nome'])
-                        
-                        # Embaralha só pra não ficar viciado na ordem da lista, mas mantendo os times
-                        # (Opcional, mas a logica acima já definiu os times)
+                            if len(verde) <= len(preto): verde.append(p['nome'])
+                            else: preto.append(p['nome'])
                         
                         st.session_state.resultado_sorteio = {"verde": verde, "preto": preto, "reservas": reservas_names}
 
@@ -446,18 +429,10 @@ if user_role == "admin":
                 ordem = st.session_state.mapa_chegada.get(clean, "?")
                 prefixo = f"<b style='color:#8B949E'>{ordem}º</b> "
                 status = ""
-                # Recupera Nivel para mostrar visualmente
-                nivel_txt = ""
-                # Tenta achar nivel no df
-                row = df_elenco[df_elenco['nome'] == clean]
-                if not row.empty:
-                    nv = row.iloc[0]['nivel']
-                    # nivel_txt = f" <span style='font-size:10px; color:#666'>Nv{nv}</span>"
-                
                 if clean in punidos_nomes:
                     if len(res_data['reservas']) > 0: status = " <span style='color:#F85149; font-weight:bold'>🟥 (Sai)</span>"
                     else: status = " <span style='color:#D29922; font-weight:bold'>⚠️ (Joga)</span>"
-                return f"{prefixo}{nome}{status}{nivel_txt}"
+                return f"{prefixo}{nome}{status}"
 
             ca, cb = st.columns(2)
             
@@ -490,7 +465,6 @@ if user_role == "admin":
                         time_icon = "🟢" if p in res_data['verde'] else "⚫"
                         lista_saida_objs.append({"nome": p, "num": num_chegada, "punido": is_punido, "icon": time_icon})
                     
-                    # Logica de Saída (Punição > Ordem Inversa de Chegada)
                     lista_saida_objs.sort(key=lambda x: (x['punido'], x['num']), reverse=True)
                     qtd_reservas = len(res_data['reservas'])
                     
@@ -617,7 +591,7 @@ if user_role == "admin":
             with c_res_v:
                 render_html_list(f"VERDE: {sv}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Verde' if not df_elenco[df_elenco['nome']==k].empty], "box-verde", "#2e7d32")
             with c_res_p:
-                render_html_list(f"PRETO: {sp}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Preto' if not df_elenco[df_elenco['nome']==k].empty], "box-preto", "#212121")
+                render_html_list(f"PRETO: {sp}", [f"{k}: {v} Gols" for k, v in sgm.items() if df_elenco[df_elenco['nome']==k]['time'].values[0] == 'Preto' if not df_elenco[df_elenco['nome']==k].empty], "box-preto", "#F0F6FC")
 
             st.divider()
             img_card = gerar_card_jogo(sdt, sv, sp, sgm, df_elenco)
@@ -648,7 +622,7 @@ if user_role == "admin":
                     st.rerun()
         
         st.divider()
-        st.subheader("📋 Visualização Rápida")
+        st.subheader("📋 Visualização Rápida (ADM)")
         cv, cp = st.columns(2)
         with cv:
             verde_list = []
@@ -814,7 +788,7 @@ with tab5:
     else:
         st.info("ℹ️ Detalhes restritos à administração.")
 
-# === ABA 6: ESTATÍSTICAS ===
+# === ABA 6: ESTATÍSTICAS (VISUAL ZEBRADO) ===
 with tab6:
     st.header("📊 Estatísticas")
     hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
