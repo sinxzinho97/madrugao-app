@@ -66,7 +66,7 @@ def load_data(sheet_name, expected_cols):
         st.error(f"Erro ao ler dados ({sheet_name}): {e}")
         return pd.DataFrame(columns=expected_cols)
 
-# --- SALVAR DADOS (COM PAUSA TÁTICA) ---
+# --- SALVAR DADOS ---
 def save_data(df, sheet_name):
     try:
         sh = get_connection()
@@ -212,175 +212,198 @@ else:
     tab6, tab4, tab5 = st.tabs(["📊 Estatísticas", "💰 Financeiro", "🏦 Cofre"])
     tab1=tab2=tab3=tab7=st.container()
 
-# === ABA 1: SORTEIO ===
+# === ABA 1: SORTEIO (COM FORM BLINDADO) ===
 if user_role == "admin":
     with tab1:
         st.header("Montar Times")
         
-        # Estado temporário para a lista de diaristas e resultado
+        # Variáveis de Estado
         if 'temp_diaristas' not in st.session_state: st.session_state.temp_diaristas = []
         if 'resultado_sorteio' not in st.session_state: st.session_state.resultado_sorteio = []
 
-        c1, c2 = st.columns([1, 2])
-        
-        with c1:
-            if not df_elenco.empty:
-                nomes = sorted(df_elenco['nome'].astype(str).tolist())
+        # --- FORMULÁRIO DE SELEÇÃO (EVITA RELOAD) ---
+        with st.form("form_sorteio_geral"):
+            c1, c2 = st.columns([1, 2])
+            
+            with c1:
+                # SELEÇÃO DE MENSALISTAS (DENTRO DO FORM = SEM PISCAR)
+                nomes = sorted(df_elenco['nome'].astype(str).tolist()) if not df_elenco.empty else []
                 mens = st.multiselect("Presença (Mensalistas):", nomes, key="t1_m")
-            else: mens = []
-            
-            st.markdown("---")
-            st.write(" **Diaristas:**")
-            
-            with st.form("form_add_diarista", clear_on_submit=True):
-                novo_diarista = st.text_input("Nome do Diarista:")
-                add_btn = st.form_submit_button("➕ Adicionar")
-                if add_btn and novo_diarista:
-                    st.session_state.temp_diaristas.append(novo_diarista)
-                    st.rerun()
-            
-            if st.session_state.temp_diaristas:
-                st.caption("Lista de Diaristas:")
-                for d in st.session_state.temp_diaristas: st.text(f"- {d}")
-                if st.button("Limpar Lista", key="btn_limpar_diaristas"):
-                    st.session_state.temp_diaristas = []
-                    st.rerun()
-
-        with c2:
-            if st.button("🎲 REALIZAR SORTEIO", type="primary"):
-                elenco = mens + st.session_state.temp_diaristas
                 
-                if not elenco: st.error("Ninguém selecionado!")
-                else:
-                    MAX = 20
-                    tit = elenco[:MAX]; res = elenco[MAX:]
-                    p_df = df_elenco[df_elenco['nome'].isin(tit)]
-                    vd = p_df[p_df['time']=='Verde']['nome'].tolist()
-                    pt = p_df[p_df['time']=='Preto']['nome'].tolist()
-                    cor = p_df[p_df['time']=='Ambos']['nome'].tolist()
-                    d_tit = [x for x in tit if x not in df_elenco['nome'].tolist()]
-                    pool = cor + d_tit
-                    random.shuffle(pool)
-                    verde, preto = list(vd), list(pt)
-                    for c in pool:
-                        dn = f"{c} (D)" if c in d_tit else c
-                        if len(verde) <= len(preto): verde.append(dn)
-                        else: preto.append(dn)
+                # ADICÃO DE DIARISTAS MANUAL (TEXTO SIMPLES)
+                st.markdown("---")
+                st.caption("Diaristas (Digite nomes separados por vírgula):")
+                diaristas_txt = st.text_area("Ex: Pedro, João", key="t1_d_txt")
+
+            with c2:
+                st.write("")
+                st.write("")
+                # BOTÃO ÚNICO DE AÇÃO
+                submitted = st.form_submit_button("🎲 REALIZAR SORTEIO", type="primary")
+                
+                if submitted:
+                    # Processa Diaristas
+                    lista_diaristas = [x.strip() for x in diaristas_txt.split(',') if x.strip()]
+                    elenco = mens + lista_diaristas
                     
-                    # Salva o resultado no estado para exibir e para o botão de envio
-                    st.session_state.resultado_sorteio = {
-                        "verde": verde,
-                        "preto": preto,
-                        "reservas": res,
-                        "titulares_orig": tit
-                    }
+                    if not elenco:
+                        st.error("Ninguém selecionado!")
+                    else:
+                        MAX = 20
+                        tit = elenco[:MAX]; res = elenco[MAX:]
+                        
+                        p_df = df_elenco[df_elenco['nome'].isin(tit)]
+                        vd = p_df[p_df['time']=='Verde']['nome'].tolist()
+                        pt = p_df[p_df['time']=='Preto']['nome'].tolist()
+                        cor = p_df[p_df['time']=='Ambos']['nome'].tolist()
+                        d_tit = [x for x in tit if x not in df_elenco['nome'].tolist()] # Diaristas
+                        
+                        pool = cor + d_tit
+                        random.shuffle(pool)
+                        verde, preto = list(vd), list(pt)
+                        
+                        for c in pool:
+                            dn = f"{c} (D)" if c in d_tit else c
+                            if len(verde) <= len(preto): verde.append(dn)
+                            else: preto.append(dn)
+                        
+                        st.session_state.resultado_sorteio = {
+                            "verde": verde,
+                            "preto": preto,
+                            "reservas": res
+                        }
 
-            # EXIBE O RESULTADO DO SORTEIO (Se houver)
-            if 'resultado_sorteio' in st.session_state and st.session_state.resultado_sorteio:
-                res_data = st.session_state.resultado_sorteio
-                
-                ca, cb = st.columns(2)
-                ca.success(f"VERDE ({len(res_data['verde'])})")
-                for x in res_data['verde']: ca.write(f"- {x}")
-                
-                cb.error(f"PRETO ({len(res_data['preto'])})")
-                for x in res_data['preto']: cb.write(f"- {x}")
-                
-                if res_data['reservas']:
-                    st.divider(); st.write("**Reservas:**")
-                    for i, r in enumerate(res_data['reservas']):
-                        st.write(f"{i+1}º {r}")
-                
+        # --- EXIBIÇÃO FORA DO FORM (RESULTADO) ---
+        if 'resultado_sorteio' in st.session_state and st.session_state.resultado_sorteio:
+            res_data = st.session_state.resultado_sorteio
+            
+            st.divider()
+            ca, cb = st.columns(2)
+            
+            with ca:
+                st.success(f"VERDE ({len(res_data['verde'])})")
+                for x in res_data['verde']: st.write(f"- {x}")
+            
+            with cb:
+                st.error(f"PRETO ({len(res_data['preto'])})")
+                for x in res_data['preto']: st.write(f"- {x}")
+            
+            if res_data['reservas']:
                 st.divider()
-                st.write("---")
+                st.warning("⏱️ **Reservas / Próximos:**")
                 
-                # --- O BOTÃO DE APROVAÇÃO ---
-                if st.button("📂 CARREGAR ESTES TIMES NA SÚMULA", type="secondary", use_container_width=True):
-                    # Lógica para separar quem vai pra onde na Súmula
-                    todos_no_jogo = res_data['verde'] + res_data['preto'] + res_data['reservas']
-                    
-                    mensalistas_para_sumula = []
-                    diaristas_para_sumula = []
-                    
-                    nomes_elenco = df_elenco['nome'].values.tolist()
-                    
-                    for nome in todos_no_jogo:
-                        # Limpa o (D) caso tenha sido adicionado na logica visual
-                        nome_limpo = nome.replace(" (D)", "")
-                        if nome_limpo in nomes_elenco:
-                            mensalistas_para_sumula.append(nome_limpo)
-                        else:
-                            diaristas_para_sumula.append(nome_limpo)
-                    
-                    # Salva na sessão para a aba Súmula ler
-                    st.session_state['import_sumula_mens'] = mensalistas_para_sumula
-                    st.session_state['import_sumula_diar'] = diaristas_para_sumula
-                    
-                    st.success("✅ Jogadores enviados para a Súmula! Vá para a aba 'Súmula' conferir.")
+                # --- LÓGICA DE SUBSTITUIÇÃO INTELIGENTE (VISUAL) ---
+                time_verde_atual = res_data['verde']
+                time_preto_atual = res_data['preto']
+                
+                for i, r in enumerate(res_data['reservas']):
+                    # Alterna: Reserva 1 tira Verde[0], Reserva 2 tira Preto[0], Reserva 3 tira Verde[1]...
+                    # Isso é apenas uma sugestão visual baseada na ordem da lista
+                    if i % 2 == 0: # Par (0, 2, 4...) -> Tira do Verde
+                        idx_sai = (i // 2) % len(time_verde_atual)
+                        sai = time_verde_atual[idx_sai]
+                        cor_time = "🟢"
+                    else: # Ímpar (1, 3, 5...) -> Tira do Preto
+                        idx_sai = (i // 2) % len(time_preto_atual)
+                        sai = time_preto_atual[idx_sai]
+                        cor_time = "⚫"
+                        
+                    st.markdown(f"**{i+1}º {r}** <span style='color: #e67e22; font-size: 0.9em;'>  🔄 (Substitui: {sai} {cor_time})</span>", unsafe_allow_html=True)
+            
+            st.divider()
+            
+            # Botão de Carregar Súmula (Fora do Form)
+            if st.button("📂 CARREGAR ESTES TIMES NA SÚMULA", type="secondary", use_container_width=True):
+                todos = res_data['verde'] + res_data['preto'] + res_data['reservas']
+                m_sum = []
+                d_sum = []
+                nomes_bd = df_elenco['nome'].values.tolist()
+                
+                for nome in todos:
+                    clean = nome.replace(" (D)", "")
+                    if clean in nomes_bd: m_sum.append(clean)
+                    else: d_sum.append(clean)
+                
+                st.session_state['import_sumula_mens'] = m_sum
+                st.session_state['import_sumula_diar'] = d_sum
+                st.success("✅ Enviado para a Súmula!")
 
-# === ABA 2: SÚMULA ===
+# === ABA 2: SÚMULA (COM FORM BLINDADO) ===
 if user_role == "admin":
     with tab2:
         st.header("Súmula")
-        dt = st.date_input("Data", datetime.today(), key="data_sumula")
+        
+        # Variáveis pré-form
         mens_list = sorted(df_elenco['nome'].astype(str).tolist()) if not df_elenco.empty else []
+        def_mens = st.session_state.get('import_sumula_mens', [])
+        def_mens = [x for x in def_mens if x in mens_list]
+        def_diar = "\n".join(st.session_state.get('import_sumula_diar', []))
         
-        # --- LÓGICA DE IMPORTAÇÃO ---
-        # Se tiver importado, usa. Se não, usa o padrão vazio.
-        default_mens = st.session_state.get('import_sumula_mens', [])
-        # Filtra para garantir que só nomes válidos entrem no multiselect
-        default_mens = [x for x in default_mens if x in mens_list]
-        
-        default_diar = "\n".join(st.session_state.get('import_sumula_diar', []))
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            jog = st.multiselect("Jogaram:", mens_list, default=default_mens)
-            dtx = st.text_area("Diaristas:", value=default_diar)
-            ld = [x.strip() for x in dtx.split('\n') if x.strip()]
-            if not ld: ld = [x.strip() for x in dtx.split(',') if x.strip()]
-        with c2: just = st.multiselect("Justificaram:", [m for m in mens_list if m not in jog])
-        
-        st.divider(); r1, r2 = st.columns(2)
-        v = r1.radio("Vencedor", ["Verde", "Preto", "Empate"], horizontal=True)
-        with r2:
-            lf = jog + ld
-            gm = {}; score_verde = 0; score_preto = 0
-            if lf:
-                qg = st.multiselect("Gols:", lf)
-                if qg:
-                    cols = st.columns(3)
-                    for i, a in enumerate(qg):
-                        t_jog = "Verde"
-                        if not df_elenco.empty:
-                            row = df_elenco[df_elenco['nome'] == a]
-                            if not row.empty: t_jog = row.iloc[0]['time']
-                        gols = cols[i%3].number_input(f"{a}", 1, 20, 1, key=f"g_{a}")
-                        gm[a] = gols
-                        if t_jog == "Verde": score_verde += gols
-                        elif t_jog == "Preto": score_preto += gols
-
-        c_save, c_print = st.columns([1, 1])
-        if c_save.button("💾 SALVAR SÚMULA", type="primary"):
-            hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
-            gid = int(datetime.now().timestamp())
-            nv = []
-            for p in lf: nv.append({"id": gid, "data": str(dt), "jogador": p, "tipo_registro": "Jogo", "gols": gm.get(p,0), "vencedor": v})
-            for j in just: nv.append({"id": gid, "data": str(dt), "jogador": j, "tipo_registro": "Justificado", "gols": 0, "vencedor": ""})
+        # --- FORMULÁRIO GIGANTE DA SÚMULA ---
+        with st.form("form_sumula_completa"):
+            dt = st.date_input("Data do Jogo:", datetime.today())
             
-            if save_data(pd.concat([hist, pd.DataFrame(nv)]), "jogos"):
-                st.toast("Súmula Salva!", icon="✅")
-                st.session_state['ultimo_placar'] = (score_verde, score_preto, gm)
-                # Limpa a importação após salvar para evitar confusão na próxima
-                if 'import_sumula_mens' in st.session_state: del st.session_state['import_sumula_mens']
-                if 'import_sumula_diar' in st.session_state: del st.session_state['import_sumula_diar']
+            c1, c2 = st.columns(2)
+            with c1:
+                jog = st.multiselect("Jogaram:", mens_list, default=def_mens)
+                dtx = st.text_area("Diaristas:", value=def_diar)
+                ld = [x.strip() for x in dtx.split('\n') if x.strip()]
+                if not ld: ld = [x.strip() for x in dtx.split(',') if x.strip()]
+            with c2:
+                just = st.multiselect("Justificaram:", [m for m in mens_list if m not in jog])
+            
+            st.divider()
+            r1, r2 = st.columns(2)
+            v = r1.radio("Vencedor:", ["Verde", "Preto", "Empate"], horizontal=True)
+            
+            with r2:
+                st.write("⚽ **Gols:**")
+                lf = jog + ld
+                gm = {}
+                score_verde = 0
+                score_preto = 0
+                
+                if lf:
+                    qg = st.multiselect("Quem fez gol?", lf)
+                    if qg:
+                        cols = st.columns(3)
+                        for i, a in enumerate(qg):
+                            t_jog = "Verde"
+                            if not df_elenco.empty:
+                                row = df_elenco[df_elenco['nome'] == a]
+                                if not row.empty: t_jog = row.iloc[0]['time']
+                            
+                            # Input numérico dentro do form (não recarrega!)
+                            gols = cols[i%3].number_input(f"{a}", 1, 20, 1, key=f"g_{a}")
+                            gm[a] = gols
+                            if t_jog == "Verde": score_verde += gols
+                            elif t_jog == "Preto": score_preto += gols
+            
+            # Botão de Salvar dentro do Form
+            submitted_sumula = st.form_submit_button("💾 SALVAR SÚMULA COMPLETA", type="primary")
+            
+            if submitted_sumula:
+                hist = load_data("jogos", ["id", "data", "jogador", "tipo_registro", "gols", "vencedor"])
+                gid = int(datetime.now().timestamp())
+                nv = []
+                for p in lf: nv.append({"id": gid, "data": str(dt), "jogador": p, "tipo_registro": "Jogo", "gols": gm.get(p,0), "vencedor": v})
+                for j in just: nv.append({"id": gid, "data": str(dt), "jogador": j, "tipo_registro": "Justificado", "gols": 0, "vencedor": ""})
+                
+                if save_data(pd.concat([hist, pd.DataFrame(nv)]), "jogos"):
+                    st.toast("Súmula Salva!", icon="✅")
+                    st.session_state['ultimo_placar_dados'] = (score_verde, score_preto, gm, str(dt))
+                    # Limpa imports
+                    if 'import_sumula_mens' in st.session_state: del st.session_state['import_sumula_mens']
+                    if 'import_sumula_diar' in st.session_state: del st.session_state['import_sumula_diar']
 
-        if gm:
-            with c_print:
-                placar_v_man = st.number_input("Verde", value=score_verde, min_value=0, key="pv_man")
-                placar_p_man = st.number_input("Preto", value=score_preto, min_value=0, key="pp_man")
-                img_card = gerar_card_jogo(str(dt), placar_v_man, placar_p_man, gm, df_elenco)
-                st.download_button("📸 Card do Jogo", img_card, f"jogo_{dt}.png", "image/png")
+        # --- ÁREA DE DOWNLOAD (FORA DO FORM) ---
+        if 'ultimo_placar_dados' in st.session_state:
+            sv, sp, sgm, sdt = st.session_state['ultimo_placar_dados']
+            st.divider()
+            st.success(f"Placar Final: Verde {sv} x {sp} Preto")
+            
+            img_card = gerar_card_jogo(sdt, sv, sp, sgm, df_elenco)
+            st.download_button("📸 Baixar Card do Jogo", img_card, f"jogo_{sdt}.png", "image/png")
 
 # === ABA 3: ELENCO ===
 if user_role == "admin":
@@ -406,6 +429,7 @@ if user_role == "admin":
         with c2:
             st.subheader("✏️ Editar")
             if not df_elenco.empty:
+                # Selectbox fora do form para ser dinâmico (única exceção necessária)
                 def formatar_nome_display(nome_original):
                     row = df_elenco[df_elenco['nome'] == nome_original]
                     if not row.empty:
@@ -415,6 +439,7 @@ if user_role == "admin":
                         elif time == 'Ambos': return f"{nome_original} (C)"
                     return nome_original
                 s = st.selectbox("Selecione:", sorted(df_elenco['nome'].astype(str).tolist()), format_func=formatar_nome_display)
+                
                 if s:
                     r = df_elenco[df_elenco['nome']==s].iloc[0]
                     with st.form("form_edit_jogador"):
@@ -435,7 +460,7 @@ if user_role == "admin":
                         if del_btn:
                             save_data(df_elenco[df_elenco['nome']!=s], "elenco"); st.rerun()
 
-# === ABA 4: FINANCEIRO (TRAVADO COM FORM) ===
+# === ABA 4: FINANCEIRO ===
 with tab4:
     st.header("💰 Controle de Pagamentos")
     cols_status = ["nome", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
@@ -460,17 +485,16 @@ with tab4:
     mes_atual = meses_map[hoje.month]
     pagos_count = df_checks[df_checks[mes_atual] == True].shape[0]
     total_atletas = df_checks.shape[0]
-    inadimplentes = total_atletas - pagos_count
     
     c_f1, c_f2 = st.columns(2)
     c_f1.info(f"Mês Atual ({mes_atual}): {pagos_count} pagos de {total_atletas}")
-    if hoje.day > 20 and inadimplentes > 0: c_f2.error(f"🚨 {inadimplentes} pendentes")
-    else: c_f2.warning(f"🕒 {inadimplentes} pendentes")
+    if hoje.day > 20 and (total_atletas - pagos_count) > 0: c_f2.error(f"🚨 Pendentes: {total_atletas - pagos_count}")
+    else: c_f2.warning(f"🕒 Pendentes: {total_atletas - pagos_count}")
 
     st.divider()
 
     if user_role in ["admin", "finance"]:
-        st.write("Marque quem está em dia (Controle Visual):")
+        st.write("Marque quem está em dia:")
         with st.form("form_financeiro_checks"):
             edited_checks = st.data_editor(df_checks, use_container_width=True, hide_index=True, key="editor_fin")
             if st.form_submit_button("💾 SALVAR LISTA (CONFIRMAR)"):
@@ -479,7 +503,7 @@ with tab4:
         st.write("Lista de Mensalistas Ativos:")
         st.dataframe(df_checks[['nome']].rename(columns={"nome": "Atleta"}), use_container_width=True, hide_index=True)
 
-# === ABA 5: COFRE (TRAVADO COM FORM) ===
+# === ABA 5: COFRE ===
 with tab5:
     st.header("🏦 Cofre do Madrugão")
     cols_mov = ["Data", "Descricao", "Valor"]
@@ -491,9 +515,9 @@ with tab5:
     saldo_caixa = total_entradas - total_saidas
 
     k1, k2, k3 = st.columns(3)
-    k1.metric("Total Arrecadado (+)", f"R$ {total_entradas:,.2f}")
-    k2.metric("Total Despesas (-)", f"R$ {total_saidas:,.2f}")
-    k3.metric("SALDO ATUAL 🏦", f"R$ {saldo_caixa:,.2f}", delta="Em Caixa")
+    k1.metric("Entradas", f"R$ {total_entradas:,.2f}")
+    k2.metric("Saídas", f"R$ {total_saidas:,.2f}")
+    k3.metric("SALDO", f"R$ {saldo_caixa:,.2f}", delta="Caixa")
     
     st.divider()
 
@@ -503,8 +527,8 @@ with tab5:
                 c_g1, c_g2, c_g3, c_g4 = st.columns([1, 2, 1, 1])
                 d_data = c_g1.date_input("Data", datetime.today(), key="cofre_data")
                 d_desc = c_g2.text_input("Descrição", key="cofre_desc")
-                d_valor = c_g3.number_input("Valor (R$)", min_value=0.0, step=10.0, key="cofre_valor")
-                d_tipo = c_g4.radio("Tipo:", ["Entrada ( + )", "Saída ( - )"], horizontal=True, key="cofre_tipo")
+                d_valor = c_g3.number_input("Valor", min_value=0.0, step=10.0, key="cofre_valor")
+                d_tipo = c_g4.radio("Tipo:", ["Entrada (+)", "Saída (-)"], horizontal=True, key="cofre_tipo")
                 if st.form_submit_button("💾 REGISTRAR"):
                     if d_desc and d_valor > 0:
                         valor_final = d_valor if "Entrada" in d_tipo else -d_valor
@@ -513,8 +537,6 @@ with tab5:
                         save_data(df_mov, "saidas"); st.success("Registrado!"); st.rerun()
         
         st.write("📝 **Histórico (Edição em Lote):**")
-        st.info("💡 Edite os valores abaixo e clique em 'SALVAR ALTERAÇÕES' para confirmar tudo de uma vez.")
-        
         if not df_mov.empty:
             df_mov['Data'] = pd.to_datetime(df_mov['Data'], errors='coerce')
             
