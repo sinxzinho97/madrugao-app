@@ -18,7 +18,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CSS PROFISSIONAL (DARK MODE & MODERN UI) ---
+# --- CSS PROFISSIONAL ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
@@ -122,7 +122,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÃO DE RENDERIZAÇÃO ---
+# --- FUNÇÕES UTILITÁRIAS ---
 def render_html_list(titulo, items, cor_classe="box-padrao", cor_titulo="#FFF"):
     st.markdown(f"<h3 style='color:{cor_titulo}; font-size: 1.2rem; margin-bottom:15px;'>{titulo}</h3>", unsafe_allow_html=True)
     html = "<div style='margin-bottom: 30px;'>"
@@ -139,19 +139,7 @@ def render_html_list(titulo, items, cor_classe="box-padrao", cor_titulo="#FFF"):
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
-# --- BARRA LATERAL ---
-with st.sidebar:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", use_container_width=True)
-    else:
-        st.markdown("<div style='height: 50px;'></div>", unsafe_allow_html=True)
-
-# --- HEADER ---
-c_title, c_logo = st.columns([4, 1])
-with c_title:
-    st.markdown("<h1 class='main-title'>Pelada Madrugão 🦉</h1>", unsafe_allow_html=True)
-
-# --- CONEXÃO INTELIGENTE (CACHE) ---
+# --- CACHE E CONEXÃO ---
 @st.cache_resource
 def get_connection():
     scopes = [
@@ -165,7 +153,6 @@ def get_connection():
     client = gspread.authorize(creds)
     return client.open_by_key("1OSxEwiE3voMOd-EI6CJ034torY-K7oFoz8EReyXkmPA")
 
-# --- LEITURA DE DADOS (CACHE) ---
 @st.cache_data(ttl=60)
 def load_data(sheet_name, expected_cols):
     try:
@@ -182,7 +169,7 @@ def load_data(sheet_name, expected_cols):
             if col not in df.columns:
                 df[col] = ""
         
-        # --- CORREÇÃO DO BUG "NONE" ---
+        # Tratamento de Nulos
         if "time" in df.columns: df["time"] = df["time"].replace("", "Ambos").fillna("Ambos")
         if "tipo" in df.columns: df["tipo"] = df["tipo"].replace("", "Mensalista").fillna("Mensalista")
         if "punicao" in df.columns: df["punicao"] = df["punicao"].replace("", "Não").fillna("Não")
@@ -201,7 +188,6 @@ def load_data(sheet_name, expected_cols):
         st.error(f"Erro ao ler dados ({sheet_name}): {e}")
         return pd.DataFrame(columns=expected_cols)
 
-# --- SALVAR DADOS ---
 def save_data(df, sheet_name):
     try:
         sh = get_connection()
@@ -220,7 +206,7 @@ def save_data(df, sheet_name):
         st.error(f"Erro ao salvar ({sheet_name}): {e}")
         return False
 
-# --- FUNÇÕES VISUAIS DE GERAÇÃO DE IMAGEM ---
+# --- FUNÇÕES VISUAIS (IMG) ---
 def gerar_imagem_bonita(df, titulo="Relatório"):
     cor_cabecalho = '#1b5e20' 
     cor_texto_cabecalho = 'white'
@@ -275,7 +261,6 @@ def gerar_card_jogo(data_jogo, placar_verde, placar_preto, gols_map, df_elenco):
     buf = io.BytesIO(); plt.savefig(buf, format='png', bbox_inches='tight', dpi=150, facecolor='#f8f9fa'); buf.seek(0)
     return buf
 
-# --- DADOS PADRÃO ---
 def carregar_elenco():
     df = load_data("elenco", ["nome", "time", "tipo", "punicao", "nivel"])
     if df.empty:
@@ -287,19 +272,24 @@ def carregar_elenco():
     
     return df
 
-# --- LOGIN (ATUALIZADO COM BOTÃO ENTRAR) ---
+# --- BARRA LATERAL & LOGIN (COM BOTÃO ENTRAR) ---
+with st.sidebar:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
+    else:
+        st.markdown("<div style='height: 50px;'></div>", unsafe_allow_html=True)
+
+# Login Form
 SENHA_ADMIN = st.secrets.get("admin_password", "1234")
 SENHA_MODERADOR = st.secrets.get("moderator_password", "bola") 
 SENHA_FINANCEIRO = st.secrets.get("finance_password", "money")
 
-# Formulário para login
 with st.sidebar.form(key="login_form"):
     st.markdown("### 🔐 Acesso Restrito")
     senha_digitada = st.text_input("Senha de Acesso", type="password", placeholder="Digite a credencial")
     btn_entrar = st.form_submit_button("ENTRAR 🔓", type="primary", use_container_width=True)
 
 user_role = "visitor"
-
 if senha_digitada == SENHA_ADMIN:
     user_role = "admin"
     st.sidebar.success("🔑 ADMIN MASTER")
@@ -311,11 +301,103 @@ elif senha_digitada == SENHA_FINANCEIRO:
     st.sidebar.warning("💰 TESOUREIRO")
 else:
     user_role = "visitor"
-    if senha_digitada:
+    if senha_digitada: # Só mostra erro se tentou digitar
         st.sidebar.error("❌ Senha Incorreta")
     else:
         st.sidebar.info("👀 MODO VISITANTE")
 
 df_elenco = carregar_elenco()
 
-# --- DAQUI PARA BAIXO O CÓDIGO CONTINUA IGUAL (NAVEGAÇÃO, ABAS, ETC) ---
+# --- HEADER ---
+c_title, c_logo = st.columns([4, 1])
+with c_title:
+    st.markdown("<h1 class='main-title'>Pelada Madrugão 🦉</h1>", unsafe_allow_html=True)
+
+# --- NAVEGAÇÃO ---
+if user_role in ["admin", "moderator"]:
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["🎲 Sorteio", "📝 Súmula", "👥 Elenco", "💰 Financeiro", "🏦 Cofre", "📊 Estatísticas", "⚙️ Ajustes"])
+elif user_role == "finance":
+    tab4, tab5, tab6 = st.tabs(["💰 Financeiro", "🏦 Cofre", "📊 Estatísticas"])
+    tab1=tab2=tab3=tab7=st.container()
+else:
+    tab6, tab4, tab5 = st.tabs(["📊 Estatísticas", "💰 Financeiro", "🏦 Cofre"])
+    tab1=tab2=tab3=tab7=st.container()
+
+# === ABA 1: SORTEIO ===
+if user_role in ["admin", "moderator"]:
+    with tab1:
+        st.header("Montar Times")
+        
+        if 'temp_diaristas' not in st.session_state: st.session_state.temp_diaristas = []
+        if 'resultado_sorteio' not in st.session_state: st.session_state.resultado_sorteio = {}
+        if 'mapa_chegada' not in st.session_state: st.session_state.mapa_chegada = {}
+
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            st.subheader("1. Diaristas")
+            with st.form("form_add_diarista", clear_on_submit=True):
+                novo_diarista = st.text_input("Nome:")
+                add_btn = st.form_submit_button("➕ Adicionar")
+                if add_btn and novo_diarista:
+                    st.session_state.temp_diaristas.append({"nome": novo_diarista, "nivel": 2})
+                    st.rerun()
+            
+            if st.session_state.temp_diaristas:
+                st.caption("Lista de Diaristas:")
+                lista_dia = [f"{i+1}. {d['nome']}" for i, d in enumerate(st.session_state.temp_diaristas)]
+                render_html_list("Diaristas Adicionados", lista_dia, "box-azul", "#1F6FEB")
+                
+                if st.button("Limpar Lista"):
+                    st.session_state.temp_diaristas = []; st.rerun()
+
+        with c2:
+            st.subheader("2. Mensalistas & Sorteio")
+            with st.form("form_sorteio_geral"):
+                nomes = sorted(df_elenco['nome'].astype(str).tolist()) if not df_elenco.empty else []
+                punidos_nomes = df_elenco[df_elenco['punicao'] == 'Sim']['nome'].tolist()
+                
+                mens = st.multiselect("Presença (Selecione na ORDEM DE CHEGADA):", nomes, key="t1_m")
+                
+                if mens:
+                    ordem_texto = ", ".join([f"{i+1}. {n}" for i, n in enumerate(mens)])
+                    st.caption(f"🏁 **Ordem Atual:** {ordem_texto}")
+                
+                if punidos_nomes:
+                    st.error(f"⚠️ Punições Pendentes: {', '.join(punidos_nomes)}")
+
+                st.write("")
+                submitted = st.form_submit_button("🎲 REALIZAR SORTEIO", type="primary")
+                
+                if submitted:
+                    pool_completo = []
+                    
+                    for m in mens:
+                        row = df_elenco[df_elenco['nome'] == m].iloc[0]
+                        pool_completo.append({
+                            "nome": m,
+                            "time_pref": row['time'],
+                            "nivel": int(row['nivel']),
+                            "tipo": "Mensalista"
+                        })
+                        
+                    for d in st.session_state.temp_diaristas:
+                        pool_completo.append({
+                            "nome": f"{d['nome']} (D)",
+                            "time_pref": "Ambos",
+                            "nivel": int(d['nivel']),
+                            "tipo": "Diarista"
+                        })
+                    
+                    mapa_chegada = {p['nome'].replace(" (D)", ""): i+1 for i, p in enumerate(pool_completo)}
+                    st.session_state.mapa_chegada = mapa_chegada
+                    
+                    if not pool_completo: st.error("Ninguém selecionado!")
+                    else:
+                        MAX = 20
+                        titulares_objs = pool_completo[:MAX]
+                        reservas_names = [p['nome'] for p in pool_completo[MAX:]]
+                        
+                        verde = []
+                        preto = []
+                        
+                        fixos_verde = [p for p in titulares_objs if p['time_pref'] ==
